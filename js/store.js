@@ -124,10 +124,18 @@
   const tamanhoFila = () => Object.keys(fila.pend).length + Object.keys(fila.exc).length;
 
   // Registro como vai para a nuvem
+  // Registros criados em versões antigas não têm atualizadoEm: ganham um agora,
+  // senão os outros aparelhos não saberiam que esta versão é a mais nova.
   function registro(col, id) {
-    if (col === 'meta' && id === 'empresa') return { ...db.empresa, id: 'empresa' };
-    if (col === 'meta' && id === 'contador') return { id: 'contador', seq: db.seq, atualizadoEm: new Date().toISOString() };
-    return (db[col] || []).find(x => x.id === id) || null;
+    const agora = new Date().toISOString();
+    if (col === 'meta' && id === 'empresa') {
+      if (!db.empresa.atualizadoEm) { db.empresa.atualizadoEm = agora; salvar(); }
+      return { ...db.empresa, id: 'empresa' };
+    }
+    if (col === 'meta' && id === 'contador') return { id: 'contador', seq: db.seq, atualizadoEm: agora };
+    const r = (db[col] || []).find(x => x.id === id) || null;
+    if (r && !r.atualizadoEm) { r.atualizadoEm = agora; salvar(); }
+    return r;
   }
 
   /* Aplica um registro vindo da nuvem. Vale o mais recente (atualizadoEm).

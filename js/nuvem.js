@@ -138,14 +138,15 @@
     try {
       const remoto = await lerTudoRemoto();
       const vivos = col => remoto[col].filter(r => !r.deletado).length;
-      const nuvemVazia = !['clientes', 'orcamentos'].some(c => vivos(c)) && !remoto.meta.some(r => r.id === 'empresa');
+      const nuvemVazia = !['clientes', 'orcamentos'].some(c => vivos(c)) && !remoto.meta.some(r => r.id === 'empresa' && r.nome);
       const primeiraVez = localStorage.getItem(CHAVE_UID) !== usuario.uid;
       const db = st.db;
       const aparelhoComDados = db.clientes.length || db.orcamentos.length || db.empresa.nome || db.catalogo.some(i => st.num(i.valor) > 0);
 
       if (primeiraVez && nuvemVazia) {
-        // primeiro aparelho desta conta: envia tudo
-        COLECOES.forEach(col => remoto[col].forEach(r => st.aplicarRemoto(col, r)));
+        // Nuvem sem dados de verdade (só catálogo padrão / empresa em branco):
+        // os dados deste aparelho prevalecem e são enviados
+        remoto.meta.filter(r => r.id === 'contador').forEach(r => st.aplicarRemoto('meta', r));
         st.marcarTudo();
       } else if (primeiraVez && !aparelhoComDados) {
         st.substituirPorRemoto(remoto);

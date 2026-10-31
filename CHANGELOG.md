@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.3.2] - 2026-10-31
+- Nuvem: se um aparelho vazio (ex.: computador) conectar primeiro, os dados do aparelho que já tem clientes prevalecem ao conectar depois, sem perguntas.
+- Registros criados em versões antigas (sem data de alteração) passam a sincronizar corretamente.
+
 ## [1.3.1] - 2026-10-31
 - Aviso "Nova versão do app disponível" com botão Atualizar; o app procura atualização ao abrir e ao voltar para ele.
 

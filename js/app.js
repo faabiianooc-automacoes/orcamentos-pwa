@@ -655,7 +655,7 @@
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.3.1</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.3.2</p>`;
 
     // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {
