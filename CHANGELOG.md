@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.3.1] - 2026-10-31
+- Aviso "Nova versão do app disponível" com botão Atualizar; o app procura atualização ao abrir e ao voltar para ele.
+
 ## [1.3.0] - 2026-10-31
 - Backup em um toque: abre o menu de compartilhar do celular (Drive, e-mail); sem suporte, baixa o arquivo.
 - Lembrete no Início quando há dados e o último backup tem 7 dias ou mais.

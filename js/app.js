@@ -655,7 +655,7 @@
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.3.0</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.3.1</p>`;
 
     // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {
@@ -977,7 +977,19 @@
   });
 
   if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    // Verifica versão nova ao abrir e ao voltar para o app; quando chegar, oferece recarregar
+    const tinhaControle = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+    }).catch(() => {});
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!tinhaControle || document.getElementById('aviso-versao')) return;
+      const b = document.createElement('div');
+      b.id = 'aviso-versao';
+      b.innerHTML = '<span>Nova versão do app disponível.</span><button class="btn prim" type="button">Atualizar</button>';
+      b.querySelector('button').onclick = () => location.reload();
+      document.body.appendChild(b);
+    });
   }
 
   if (window.Nuvem) {

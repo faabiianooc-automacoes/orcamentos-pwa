@@ -293,3 +293,6 @@ body.com-barra #toast { bottom: calc(var(--tabbar-h) + 92px + env(safe-area-inse
 .status-nuvem { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font-size: 13px; text-decoration: none; }
 .status-nuvem svg { width: 18px; height: 18px; color: var(--primary); }
 code { font-family: ui-monospace, monospace; font-size: .92em; background: var(--surface-2); padding: 1px 4px; border-radius: 4px; }
+
+/* Aviso de nova versão */
+#aviso-versao { position: fixed; left: 12px; right: 12px; top: calc(64px + env(safe-area-inset-top)); z-index: 40; display: flex; align-items: center; gap: 12px; justify-content: space-between; max-width: 560px; margin: 0 auto; padding: 10px 12px 10px 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--primary); box-shadow: 0 8px 24px rgba(0,0,0,.15); font-weight: 600; }
