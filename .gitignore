@@ -1,0 +1,9 @@
+# Nunca enviar dados de clientes para o repositório (ele é público)
+*.pdf
+backup-*.json
+Orcamento-*.pdf
+
+# Sistema / editores
+.DS_Store
+*.log
+node_modules/

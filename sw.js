@@ -1,0 +1,39 @@
+/* Service worker: guarda o app no aparelho para funcionar sem internet.
+   Ao publicar uma nova versão, aumente VERSAO para forçar a atualização. */
+const VERSAO = 'orcamentos-v1.2.1';
+const ARQUIVOS = [
+  './',
+  'index.html',
+  'manifest.webmanifest',
+  'css/app.css',
+  'js/catalogo-padrao.js',
+  'js/store.js',
+  'js/pdf.js',
+  'js/whatsapp.js',
+  'js/app.js',
+  'vendor/jspdf.umd.min.js',
+  'vendor/jspdf.plugin.autotable.min.js',
+  'icons/icon-192.png',
+  'icons/icon-512.png',
+  'icons/apple-touch-icon.png'
+];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(VERSAO).then(c => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys()
+      .then(chaves => Promise.all(chaves.filter(k => k !== VERSAO).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+// Primeiro o cache; se não houver, busca na rede.
+self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== self.location.origin) return;
+  e.respondWith(
+    caches.match(e.request, { ignoreSearch: true }).then(r => r || fetch(e.request).catch(() => caches.match('index.html')))
+  );
+});
