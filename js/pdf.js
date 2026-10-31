@@ -144,15 +144,29 @@
       y += 8 + linhas.length * 4.2;
     });
 
-    /* Aceite */
-    novaPaginaSe(30);
-    y += 10;
+    /* Assinaturas: responsável (rubrica automática) à esquerda, aceite do cliente à direita */
+    novaPaginaSe(42);
+    y += 8;
+    const colW = (W - 2 * M - 16) / 2;
+    const xCli = M + colW + 16;
+    const yLinha = y + 22;
+    if (e.assinatura && e.assinarAuto !== false) {
+      try {
+        const pr = doc.getImageProperties(e.assinatura);
+        const r = Math.min(60 / pr.width, 19 / pr.height);
+        const w = pr.width * r, h = pr.height * r;
+        doc.addImage(e.assinatura, 'PNG', M + (colW - w) / 2, yLinha - h - 0.5, w, h);
+      } catch (err) { /* assinatura inválida: segue sem ela */ }
+    }
     doc.setDrawColor(150, 160, 170); doc.setLineWidth(0.3);
-    doc.line(M, y + 10, M + 85, y + 10);
-    doc.line(W - M - 55, y + 10, W - M, y + 10);
-    doc.setFontSize(8); doc.setTextColor(90, 100, 110);
-    doc.text('Aceite do cliente', M, y + 14.5);
-    doc.text('Data', W - M - 55, y + 14.5);
+    doc.line(M, yLinha, M + colW, yLinha);
+    doc.line(xCli, yLinha, xCli + colW, yLinha);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(40, 50, 60);
+    doc.text(limpar(e.assinaturaNome || e.nome || 'Responsável'), M + colW / 2, yLinha + 4.5, { align: 'center' });
+    doc.text(limpar(c.nome || 'Cliente'), xCli + colW / 2, yLinha + 4.5, { align: 'center' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(110, 120, 130);
+    doc.text(limpar(e.assinaturaNome && e.nome && e.assinaturaNome !== e.nome ? e.nome : 'Responsável'), M + colW / 2, yLinha + 8.5, { align: 'center' });
+    doc.text('Aceite do cliente   Data: ____/____/______', xCli + colW / 2, yLinha + 8.5, { align: 'center' });
 
     /* Rodapé */
     const total = doc.getNumberOfPages();

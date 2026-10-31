@@ -626,6 +626,21 @@
         <div class="campo"><button class="btn" id="cores-padrao" type="button">Restaurar cores padrão</button></div>
       </div></div>
 
+      <h2>Assinatura (rubrica)</h2>
+      <div class="card" id="assin"><div class="campos">
+        <div class="campo">
+          <div class="assin-prev">${e.assinatura ? `<img src="${e.assinatura}" alt="Sua rubrica">` : '<span class="muted">Nenhuma rubrica cadastrada</span>'}</div>
+          <span class="ajuda">Vai acima da linha "Responsável" no fim do PDF.</span>
+        </div>
+        <div class="campo"><div class="acoes" style="margin-top:0">
+          <button class="btn" id="rub-texto" type="button">Criar pelo texto</button>
+          <button class="btn" id="rub-desenho" type="button">Desenhar</button>
+          ${e.assinatura ? '<button class="btn perigo" id="rub-remover" type="button">Remover</button>' : ''}
+        </div></div>
+        <div class="campo"><label class="check"><input type="checkbox" data-f="assinarAuto" ${e.assinarAuto !== false ? 'checked' : ''}> Assinar automaticamente todos os orçamentos</label></div>
+        <div class="campo"><label for="a-nome">Nome abaixo da assinatura</label><input id="a-nome" data-f="assinaturaNome" value="${esc(e.assinaturaNome)}" placeholder="${esc(e.nome || 'Ex.: seu nome completo')}"><span class="ajuda">Em branco, usa o nome da empresa.</span></div>
+      </div></div>
+
       <h2>Padrões dos novos orçamentos</h2>
       <div class="card" id="pad"><div class="campos">
         <div class="campo c3 m3"><label for="p-pre">Prefixo do número</label><input id="p-pre" data-f="prefixo" value="${esc(e.prefixo)}" maxlength="8"><span class="ajuda">Ex.: ${esc(e.prefixo || 'ORC')}-${new Date().getFullYear()}-0001</span></div>
@@ -655,11 +670,11 @@
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.3.2</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.4.0</p>`;
 
     // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {
-      const dados = { ...lerCampos(app.querySelector('#emp')), ...lerCampos(app.querySelector('#cores')), ...lerCampos(app.querySelector('#pad')) };
+      const dados = { ...lerCampos(app.querySelector('#emp')), ...lerCampos(app.querySelector('#cores')), ...lerCampos(app.querySelector('#assin')), ...lerCampos(app.querySelector('#pad')) };
       dados.telefone = st.soDigitos(dados.telefone);
       dados.validadeDias = parseInt(dados.validadeDias, 10) || 15;
       const mudou = Object.keys(dados).some(k => String(dados[k]) !== String(st.db.empresa[k] == null ? '' : st.db.empresa[k]));
@@ -694,6 +709,13 @@
       atualizarCores(); salvarEmpresa(); toast('Cores padrão restauradas.');
     };
     atualizarCores();
+
+    // Rubrica
+    const novaRubrica = async dados => { salvarEmpresa(); st.salvarEmpresa(dados); toast(dados.assinatura ? 'Rubrica salva.' : 'Rubrica removida.'); limparTela(); limparTela = null; ajustes(); };
+    app.querySelector('#rub-texto').onclick = async () => { const r = await dialogoRubricaTexto(); if (r) novaRubrica(r); };
+    app.querySelector('#rub-desenho').onclick = async () => { const r = await dialogoRubricaDesenho(); if (r) novaRubrica({ assinatura: r, rubricaTexto: '', rubricaEstilo: 'desenho' }); };
+    const rr = app.querySelector('#rub-remover');
+    if (rr) rr.onclick = async () => { if (await confirmar('Remover rubrica', 'Os próximos PDFs saem sem assinatura.', 'Remover')) novaRubrica({ assinatura: '', rubricaTexto: '', rubricaEstilo: '' }); };
 
     app.querySelector('#logo').addEventListener('change', async ev => {
       const f = ev.target.files[0]; if (!f) return;
@@ -845,6 +867,133 @@
     window.Nuvem.salvarConfig(cfg);
     toast('Configuração salva. Agora entre com sua conta.');
     window.Nuvem.iniciar();
+  }
+
+  /* ---------- Rubrica ---------- */
+  const ESTILOS_RUBRICA = [
+    { id: 'great-vibes', nome: 'Clássica', arquivo: 'fonts/great-vibes.woff2', tamanho: 1 },
+    { id: 'allura', nome: 'Elegante', arquivo: 'fonts/allura.woff2', tamanho: 1.05 },
+    { id: 'dancing-script', nome: 'Moderna', arquivo: 'fonts/dancing-script.woff2', tamanho: 0.85 }
+  ];
+  const TINTA = '#1d3a8a'; // azul de caneta
+  const fontesCarregadas = {};
+  async function carregarFonte(est) {
+    if (!fontesCarregadas[est.id]) {
+      const f = new FontFace('rub-' + est.id, `url(${est.arquivo})`);
+      fontesCarregadas[est.id] = f.load().then(ff => { document.fonts.add(ff); return true; });
+    }
+    return fontesCarregadas[est.id];
+  }
+  // Recorta o espaço vazio em volta e devolve PNG transparente
+  function recortar(cv, margem = 8) {
+    const ctx = cv.getContext('2d');
+    const { data, width, height } = ctx.getImageData(0, 0, cv.width, cv.height);
+    let x0 = width, y0 = height, x1 = -1, y1 = -1;
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] > 10) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    if (x1 < 0) return '';
+    x0 = Math.max(0, x0 - margem); y0 = Math.max(0, y0 - margem);
+    x1 = Math.min(width - 1, x1 + margem); y1 = Math.min(height - 1, y1 + margem);
+    const out = document.createElement('canvas');
+    const esc2 = Math.min(1, 600 / (x1 - x0 + 1));
+    out.width = Math.round((x1 - x0 + 1) * esc2); out.height = Math.round((y1 - y0 + 1) * esc2);
+    out.getContext('2d').drawImage(cv, x0, y0, x1 - x0 + 1, y1 - y0 + 1, 0, 0, out.width, out.height);
+    return out.toDataURL('image/png');
+  }
+  async function rubricaDeTexto(texto, est) {
+    await carregarFonte(est);
+    const cv = document.createElement('canvas');
+    const px = Math.round(150 * est.tamanho);
+    const ctx = cv.getContext('2d');
+    ctx.font = `${px}px "rub-${est.id}"`;
+    cv.width = Math.ceil(ctx.measureText(texto).width + px); cv.height = Math.round(px * 1.8);
+    ctx.font = `${px}px "rub-${est.id}"`;
+    ctx.fillStyle = TINTA; ctx.textBaseline = 'middle';
+    ctx.fillText(texto, px / 2, cv.height / 2);
+    return recortar(cv);
+  }
+
+  async function dialogoRubricaTexto() {
+    const e = st.db.empresa;
+    let escolhido = null;
+    const r = await dialogo({
+      titulo: 'Criar rubrica pelo texto',
+      corpo: `<div class="campo"><label for="rub-txt">Texto da rubrica</label>
+          <input id="rub-txt" value="${esc(e.rubricaTexto || '')}" placeholder="Ex.: fcarvalho" maxlength="30" autocomplete="off"></div>
+        <p class="ajuda">Toque no estilo que preferir:</p>
+        <div class="rub-estilos">${ESTILOS_RUBRICA.map(es => `<button type="button" class="rub-op" data-est="${es.id}"><img alt=""><span>${es.nome}</span></button>`).join('')}</div>`,
+      acoes: [{ rotulo: 'Cancelar', valor: null }, {
+        rotulo: 'Usar esta rubrica', classe: 'prim', valor: 'ok',
+        antes: d => { if (!escolhido) { toast('Digite o texto e escolha um estilo.'); return false; } return true; }
+      }],
+      aoAbrir: d => {
+        const inp = d.querySelector('#rub-txt');
+        let t;
+        const desenhar = async () => {
+          const txt = inp.value.trim();
+          for (const es of ESTILOS_RUBRICA) {
+            const b = d.querySelector(`[data-est="${es.id}"]`);
+            const img = b.querySelector('img');
+            if (!txt) { img.removeAttribute('src'); continue; }
+            try { img.src = await rubricaDeTexto(txt, es); } catch (err) { img.removeAttribute('src'); }
+          }
+          const sel = d.querySelector('.rub-op.ativo');
+          escolhido = sel && txt ? { estilo: sel.dataset.est, texto: txt, img: sel.querySelector('img').src } : null;
+        };
+        inp.addEventListener('input', () => { clearTimeout(t); t = setTimeout(desenhar, 200); });
+        d.querySelector('.rub-estilos').addEventListener('click', ev => {
+          const b = ev.target.closest('.rub-op'); if (!b) return;
+          d.querySelectorAll('.rub-op').forEach(x => x.classList.toggle('ativo', x === b));
+          const txt = inp.value.trim();
+          escolhido = txt && b.querySelector('img').src ? { estilo: b.dataset.est, texto: txt, img: b.querySelector('img').src } : null;
+        });
+        if (e.rubricaEstilo) { const b = d.querySelector(`[data-est="${e.rubricaEstilo}"]`); if (b) b.classList.add('ativo'); }
+        desenhar();
+        setTimeout(() => inp.focus(), 50);
+      }
+    });
+    if (r !== 'ok' || !escolhido) return null;
+    return { assinatura: escolhido.img, rubricaTexto: escolhido.texto, rubricaEstilo: escolhido.estilo };
+  }
+
+  async function dialogoRubricaDesenho() {
+    let cvRef = null, vazio = true;
+    const r = await dialogo({
+      titulo: 'Desenhar rubrica',
+      corpo: `<p class="ajuda" style="margin-top:0">Desenhe com o dedo (ou o mouse) dentro do quadro.</p>
+        <canvas id="rub-cv" class="rub-cv"></canvas>
+        <div class="acoes"><button class="btn" type="button" id="rub-limpar">Limpar</button></div>`,
+      acoes: [{ rotulo: 'Cancelar', valor: null }, {
+        rotulo: 'Usar este desenho', classe: 'prim', valor: 'ok',
+        antes: () => { if (vazio) { toast('Desenhe a rubrica primeiro.'); return false; } return true; }
+      }],
+      aoAbrir: d => {
+        const cv = d.querySelector('#rub-cv'); cvRef = cv;
+        const escala = 2;
+        const ajustar = () => { const b = cv.getBoundingClientRect(); cv.width = Math.round(b.width * escala); cv.height = Math.round(b.height * escala); };
+        ajustar();
+        const ctx = cv.getContext('2d');
+        const estilo = () => { ctx.strokeStyle = TINTA; ctx.lineWidth = 3.2 * escala; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; };
+        estilo();
+        let desenhando = false, ult = null;
+        const pos = ev => { const b = cv.getBoundingClientRect(); return { x: (ev.clientX - b.left) * escala, y: (ev.clientY - b.top) * escala }; };
+        cv.addEventListener('pointerdown', ev => { desenhando = true; ult = pos(ev); cv.setPointerCapture(ev.pointerId); ctx.beginPath(); ctx.arc(ult.x, ult.y, ctx.lineWidth / 2, 0, Math.PI * 2); ctx.fillStyle = TINTA; ctx.fill(); vazio = false; ev.preventDefault(); });
+        cv.addEventListener('pointermove', ev => {
+          if (!desenhando) return;
+          const p = pos(ev);
+          ctx.beginPath(); ctx.moveTo(ult.x, ult.y);
+          ctx.quadraticCurveTo(ult.x, ult.y, (ult.x + p.x) / 2, (ult.y + p.y) / 2);
+          ctx.lineTo(p.x, p.y); ctx.stroke();
+          ult = p; ev.preventDefault();
+        });
+        const fim = () => { desenhando = false; };
+        cv.addEventListener('pointerup', fim); cv.addEventListener('pointercancel', fim);
+        d.querySelector('#rub-limpar').onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); vazio = true; };
+      }
+    });
+    if (r !== 'ok' || !cvRef) return null;
+    return recortar(cvRef, 12) || null;
   }
 
   function reduzirImagem(arquivo, max) {

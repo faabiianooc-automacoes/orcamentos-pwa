@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0] - 2026-10-31
+- Rubrica automática no PDF: criada a partir de um texto (3 estilos de letra cursiva, em azul de caneta) ou desenhada com o dedo/mouse.
+- Opção "Assinar automaticamente todos os orçamentos" e nome exibido abaixo da assinatura.
+- Fim do PDF com dois campos lado a lado: responsável (com a rubrica) e aceite do cliente (com nome e data).
+- A rubrica sincroniza com a nuvem junto com os demais ajustes.
+- Fontes Great Vibes, Allura e Dancing Script (SIL Open Font License) incluídas no app, funcionam offline.
+
 ## [1.3.2] - 2026-10-31
 - Nuvem: se um aparelho vazio (ex.: computador) conectar primeiro, os dados do aparelho que já tem clientes prevalecem ao conectar depois, sem perguntas.
 - Registros criados em versões antigas (sem data de alteração) passam a sincronizar corretamente.

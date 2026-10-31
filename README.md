@@ -7,7 +7,7 @@ App instalável (PWA) para cadastrar clientes, montar orçamentos, gerar o PDF e
 - **Clientes:** nome, WhatsApp com DDD, e-mail, CPF/CNPJ, endereço da instalação, tipo de imóvel e observações.
 - **Orçamentos:** numeração automática (`ORC-2026-0001`), itens do catálogo ou avulsos, desconto em % ou R$, validade, prazo, pagamento, garantia, observações e status (Rascunho, Enviado, Aprovado, Recusado; "Vencido" é calculado).
 - **Verificação antes de enviar:** o app lista o que falta (cliente, telefone, itens sem valor, condições de pagamento etc.).
-- **PDF:** A4 com logo, dados da empresa e do cliente, tabela de itens, totais, condições e campo de aceite.
+- **PDF:** A4 com logo, dados da empresa e do cliente, tabela de itens, totais, condições, rubrica automática do responsável e campo de aceite do cliente.
 - **WhatsApp:**
   - No celular, o botão **Enviar** abre o menu de compartilhar já com o PDF e a mensagem. Basta escolher WhatsApp e o contato.
   - No computador (ou em navegadores sem suporte), o PDF é baixado e o app abre a conversa do contato cadastrado com a mensagem pronta, para você anexar o arquivo.
@@ -77,6 +77,7 @@ js/app.js               Telas e navegação
 vendor/                 jsPDF 2.5.1, jsPDF-AutoTable 3.8.2 (MIT) e Firebase JS SDK 10.14.1 compat (Apache-2.0)
 FIREBASE.md             Passo a passo para ativar a nuvem
 firestore.rules         Regras de segurança do banco
+fonts/                  Fontes cursivas da rubrica (SIL Open Font License)
 icons/                  Ícones do app
 ```
 

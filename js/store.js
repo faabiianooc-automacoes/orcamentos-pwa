@@ -47,6 +47,7 @@
       empresa: {
         nome: '', documento: '', telefone: '', email: '', endereco: '', cidade: '',
         logo: '', corTexto: '#0f766e', corFundo: '#0f766e',
+        assinatura: '', assinaturaNome: '', assinarAuto: true, rubricaTexto: '', rubricaEstilo: '',
         prefixo: 'ORC', validadeDias: 15,
         prazoPadrao: '', pagamentoPadrao: '', garantiaPadrao: '', observacoesPadrao: '',
         mensagemPadrao: 'Olá, {cliente}! Segue o orçamento {numero} no valor de {total}, válido até {validade}. Qualquer dúvida, estou à disposição.\n{empresa}'
