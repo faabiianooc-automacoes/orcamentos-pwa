@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.0] - 2026-10-31
+- Backup em um toque: abre o menu de compartilhar do celular (Drive, e-mail); sem suporte, baixa o arquivo.
+- Lembrete no Início quando há dados e o último backup tem 7 dias ou mais.
+- Restaurar backup aceita .json e .txt.
+- Nuvem opcional (Firebase, plano gratuito): login por e-mail/senha ou Google, sincronização em tempo real entre aparelhos, funciona offline e envia ao reconectar, exclusões propagadas, numeração dos orçamentos contínua entre aparelhos.
+- Primeira conexão de um aparelho com dados: escolher entre usar os dados da nuvem ou juntar (sem duplicar o catálogo).
+- Sair da nuvem com opção de apagar os dados do aparelho.
+- Itens do catálogo padrão com identificador fixo (iguais em todos os aparelhos).
+
 ## [1.2.1] - 2026-10-31
 - Telas estreitas (320 a 400 px): botões da barra de total só com ícone e valor total sem cortar.
 - Telas muito pequenas e celular deitado: campos e navegação mais compactos.

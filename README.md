@@ -19,11 +19,12 @@ App instalável (PWA) para cadastrar clientes, montar orçamentos, gerar o PDF e
 
 ## Onde ficam os dados
 
-Os dados ficam **somente no aparelho** (localStorage do navegador). Não há servidor nem conta.
+Os dados ficam **no aparelho** (localStorage do navegador). Há duas formas de não perdê-los:
 
-- Exporte um backup em **Ajustes → Backup** com frequência.
-- Para usar em outro aparelho, exporte em um e importe no outro.
-- Limpar os dados do navegador apaga tudo, então faça backup antes.
+- **Backup:** em **Ajustes → Backup → Fazer backup**, o celular abre o menu de compartilhar; escolha **Drive** ou e-mail. O Início lembra de fazer backup a cada 7 dias. Para recuperar: **Restaurar backup**.
+- **Nuvem (gratuita, opcional):** com o Firebase configurado, cada alteração é enviada para a nuvem e aparece nos outros aparelhos com a mesma conta. Veja **[FIREBASE.md](FIREBASE.md)**. As regras de segurança estão em `firestore.rules`.
+
+Limpar os dados do navegador apaga o que está no aparelho; com a nuvem ativa, basta entrar de novo.
 
 ## Como publicar
 
@@ -71,8 +72,11 @@ js/catalogo-padrao.js   Itens iniciais do catálogo (edite aqui para incluir ser
 js/store.js             Dados, cálculos, validações e backup
 js/pdf.js               Geração do PDF
 js/whatsapp.js          Compartilhar e links do WhatsApp
+js/nuvem.js             Login e sincronização com o Firebase (carregado só se configurado)
 js/app.js               Telas e navegação
-vendor/                 jsPDF 2.5.1 e jsPDF-AutoTable 3.8.2 (licença MIT)
+vendor/                 jsPDF 2.5.1, jsPDF-AutoTable 3.8.2 (MIT) e Firebase JS SDK 10.14.1 compat (Apache-2.0)
+FIREBASE.md             Passo a passo para ativar a nuvem
+firestore.rules         Regras de segurança do banco
 icons/                  Ícones do app
 ```
 
@@ -80,5 +84,4 @@ icons/                  Ícones do app
 
 - Pacotes prontos por módulo (ex.: "Kit Água v1" com todos os itens e preços).
 - Fotos da visita técnica anexadas ao orçamento.
-- Sincronização entre aparelhos (exige backend, ex.: Supabase ou Firebase).
 - Envio automático pela API oficial do WhatsApp Business.

@@ -17,10 +17,11 @@
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const hoje = () => new Date().toISOString().slice(0, 10);
 
-  // Itens genéricos, SEM preço (ver js/catalogo-padrao.js)
-  const catalogoInicial = () => ordenarCatalogo(CP.itens.map(i => ({ id: uid(), valor: 0, ...i })));
-
   const chaveDesc = s => String(s || '').trim().toLowerCase();
+  // Id fixo para itens do catálogo padrão: igual em todos os aparelhos (evita duplicar na nuvem)
+  const idPadrao = desc => 'p-' + chaveDesc(desc).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+  // Itens genéricos, SEM preço (ver js/catalogo-padrao.js)
+  const catalogoInicial = () => ordenarCatalogo(CP.itens.map(i => ({ id: idPadrao(i.descricao), valor: 0, ...i })));
   const ordemGrupo = g => { const i = GRUPOS.indexOf(g); return i < 0 ? GRUPOS.length : i; };
   function ordenarCatalogo(l) {
     return l.sort((a, b) => ordemGrupo(a.grupo) - ordemGrupo(b.grupo) || a.descricao.localeCompare(b.descricao, 'pt-BR'));
@@ -34,7 +35,7 @@
       if (!i.grupo) i.grupo = (padrao.get(chaveDesc(i.descricao)) || {}).grupo || 'Outros';
     });
     const existentes = new Set(d.catalogo.map(i => chaveDesc(i.descricao)));
-    CP.itens.forEach(i => { if (!existentes.has(chaveDesc(i.descricao))) d.catalogo.push({ id: uid(), valor: 0, ...i }); });
+    CP.itens.forEach(i => { if (!existentes.has(chaveDesc(i.descricao))) d.catalogo.push({ id: idPadrao(i.descricao), valor: 0, ...i }); });
     ordenarCatalogo(d.catalogo);
     d.versaoCatalogo = CP.VERSAO_CATALOGO;
   }
@@ -86,6 +87,109 @@
 
   let db = carregar();
   let aoFalhar = () => {};
+
+  /* ---------- Fila de sincronização com a nuvem ----------
+     Guardada separada dos dados (não vai no backup). pend: registros alterados
+     a enviar; exc: registros excluídos a enviar como "excluído". */
+  const CHAVE_FILA = 'orcamentos-pwa:fila-nuvem';
+  let fila = (() => { try { return JSON.parse(localStorage.getItem(CHAVE_FILA)) || { pend: {}, exc: {} }; } catch (e) { return { pend: {}, exc: {} }; } })();
+  let aoAlterar = () => {};
+  let contadorMarca = 0;
+  function gravarFila() { try { localStorage.setItem(CHAVE_FILA, JSON.stringify(fila)); } catch (e) {} }
+  function marcar(col, id) {
+    const k = col + '/' + id;
+    delete fila.exc[k];
+    fila.pend[k] = Date.now() + '.' + (++contadorMarca);
+    gravarFila(); aoAlterar();
+  }
+  function marcarExclusao(col, id) {
+    const k = col + '/' + id;
+    delete fila.pend[k];
+    fila.exc[k] = new Date().toISOString();
+    gravarFila(); aoAlterar();
+  }
+  function marcarTudo() {
+    ['clientes', 'orcamentos', 'catalogo'].forEach(col => db[col].forEach(x => { fila.pend[col + '/' + x.id] = Date.now() + '.' + (++contadorMarca); }));
+    fila.pend['meta/empresa'] = fila.pend['meta/contador'] = Date.now() + '.' + (++contadorMarca);
+    gravarFila(); aoAlterar();
+  }
+  const filaAtual = () => JSON.parse(JSON.stringify(fila));
+  // Remove da fila só o que não mudou desde que foi lido (enviado)
+  function confirmarEnvio(enviada) {
+    Object.entries(enviada.pend).forEach(([k, v]) => { if (fila.pend[k] === v) delete fila.pend[k]; });
+    Object.entries(enviada.exc).forEach(([k, v]) => { if (fila.exc[k] === v) delete fila.exc[k]; });
+    gravarFila();
+  }
+  function limparFila() { fila = { pend: {}, exc: {} }; gravarFila(); }
+  const tamanhoFila = () => Object.keys(fila.pend).length + Object.keys(fila.exc).length;
+
+  // Registro como vai para a nuvem
+  function registro(col, id) {
+    if (col === 'meta' && id === 'empresa') return { ...db.empresa, id: 'empresa' };
+    if (col === 'meta' && id === 'contador') return { id: 'contador', seq: db.seq, atualizadoEm: new Date().toISOString() };
+    return (db[col] || []).find(x => x.id === id) || null;
+  }
+
+  /* Aplica um registro vindo da nuvem. Vale o mais recente (atualizadoEm).
+     Retorna true se mudou algo neste aparelho. */
+  function aplicarRemoto(col, r) {
+    if (!r || !r.id) return false;
+    if (col === 'meta') {
+      if (r.id === 'contador') { const n = Number(r.seq) || 0; if (n > db.seq) { db.seq = n; return true; } return false; }
+      if (r.id === 'empresa') {
+        if ((r.atualizadoEm || '') > (db.empresa.atualizadoEm || '')) { const { id, ...resto } = r; db.empresa = { ...db.empresa, ...resto }; return true; }
+        return false;
+      }
+      return false;
+    }
+    const lista = db[col]; if (!lista) return false;
+    const i = lista.findIndex(x => x.id === r.id);
+    const local = i >= 0 ? lista[i] : null;
+    if (r.deletado) {
+      if (local && (local.atualizadoEm || '') <= (r.atualizadoEm || '')) { lista.splice(i, 1); delete fila.pend[col + '/' + r.id]; gravarFila(); return true; }
+      return false;
+    }
+    if (fila.exc[col + '/' + r.id]) return false; // excluído aqui, ainda não enviado
+    const { deletado, ...limpo } = r;
+    if (!local) { lista.push(limpo); ordenarColecao(col); return true; }
+    if ((r.atualizadoEm || '') > (local.atualizadoEm || '')) { lista[i] = limpo; ordenarColecao(col); return true; }
+    return false;
+  }
+  function ordenarColecao(col) {
+    if (col === 'catalogo') ordenarCatalogo(db.catalogo);
+    if (col === 'orcamentos') db.orcamentos.sort((a, b) => String(b.criadoEm || '').localeCompare(String(a.criadoEm || '')));
+  }
+
+  // Primeira conexão de um aparelho que já tinha dados: junta sem duplicar o catálogo
+  function juntarCatalogoDuplicado() {
+    const porDesc = new Map();
+    const remover = [];
+    db.catalogo.forEach(it => {
+      const k = chaveDesc(it.descricao);
+      const outro = porDesc.get(k);
+      if (!outro) { porDesc.set(k, it); return; }
+      // fica o que tem preço (ou o mais recente); o outro sai
+      const fica = num(it.valor) > num(outro.valor) || (num(it.valor) === num(outro.valor) && (it.atualizadoEm || '') > (outro.atualizadoEm || '')) ? it : outro;
+      const sai = fica === it ? outro : it;
+      porDesc.set(k, fica); remover.push(sai.id);
+    });
+    remover.forEach(id => { db.catalogo = db.catalogo.filter(x => x.id !== id); marcarExclusao('catalogo', id); });
+  }
+
+  // Troca os dados deste aparelho pelos da nuvem
+  function substituirPorRemoto(remoto) {
+    const base = inicial();
+    db.clientes = []; db.orcamentos = []; db.catalogo = []; db.seq = 0;
+    db.empresa = { ...base.empresa };
+    limparFila();
+    Object.entries(remoto).forEach(([col, regs]) => regs.forEach(r => aplicarRemoto(col, r)));
+    if (!db.catalogo.length) db.catalogo = base.catalogo;
+    salvar();
+  }
+
+  function resetar() {
+    db = inicial(); limparFila(); salvar();
+  }
   // Grava logo na abertura, para que migrações (ex.: itens novos no catálogo) fiquem salvas
   setTimeout(() => salvar(), 0);
 
@@ -173,12 +277,12 @@
       if (i >= 0) db.clientes[i] = c; else db.clientes.push(c);
     }
     c.atualizadoEm = new Date().toISOString();
-    salvar();
+    salvar(); marcar('clientes', c.id);
     return c;
   }
   function excluirCliente(id) {
     db.clientes = db.clientes.filter(c => c.id !== id);
-    salvar();
+    salvar(); marcarExclusao('clientes', id);
   }
 
   /* ---------- Orçamentos ---------- */
@@ -208,7 +312,7 @@
       enviadoEm: ''
     };
     db.orcamentos.unshift(o);
-    salvar();
+    salvar(); marcar('orcamentos', o.id); marcar('meta', 'contador');
     return o;
   }
 
@@ -216,7 +320,8 @@
     o.atualizadoEm = new Date().toISOString();
     const i = db.orcamentos.findIndex(x => x.id === o.id);
     if (i >= 0) db.orcamentos[i] = o; else db.orcamentos.unshift(o);
-    return salvar();
+    const ok = salvar(); marcar('orcamentos', o.id);
+    return ok;
   }
 
   function duplicarOrcamento(o) {
@@ -234,7 +339,7 @@
 
   function excluirOrcamento(id) {
     db.orcamentos = db.orcamentos.filter(o => o.id !== id);
-    salvar();
+    salvar(); marcarExclusao('orcamentos', id);
   }
 
   const orcamentoVazio = o => !o.clienteId && !o.titulo && o.itens.length === 0;
@@ -278,12 +383,20 @@
       const i = db.catalogo.findIndex(x => x.id === it.id);
       if (i >= 0) db.catalogo[i] = it; else db.catalogo.push(it);
     }
+    it.atualizadoEm = new Date().toISOString();
     ordenarCatalogo(db.catalogo);
-    salvar();
+    salvar(); marcar('catalogo', it.id);
   }
   function excluirItemCatalogo(id) {
     db.catalogo = db.catalogo.filter(i => i.id !== id);
-    salvar();
+    salvar(); marcarExclusao('catalogo', id);
+  }
+
+  /* ---------- Empresa ---------- */
+  function salvarEmpresa(dados) {
+    Object.assign(db.empresa, dados || {});
+    db.empresa.atualizadoEm = new Date().toISOString();
+    salvar(); marcar('meta', 'empresa');
   }
 
   /* ---------- Backup ---------- */
@@ -293,8 +406,14 @@
     const d = j && j.dados ? j.dados : j;
     if (!d || !Array.isArray(d.orcamentos) || !Array.isArray(d.clientes)) throw new Error('Arquivo não é um backup deste app.');
     db = migrar(d);
-    salvar();
+    salvar(); marcarTudo();
   }
+
+  /* ---------- Lembrete de backup (só neste aparelho) ---------- */
+  const CHAVE_BACKUP = 'orcamentos-pwa:ultimo-backup';
+  function marcarBackup() { try { localStorage.setItem(CHAVE_BACKUP, new Date().toISOString()); } catch (e) {} }
+  function ultimoBackup() { try { return localStorage.getItem(CHAVE_BACKUP) || ''; } catch (e) { return ''; } }
+  const temDados = () => db.clientes.length + db.orcamentos.length > 0;
 
   window.Store = {
     STATUS, TIPOS_ITEM, UNIDADES, GRUPOS, TIPOS_IMOVEL,
@@ -306,7 +425,11 @@
     salvar, cliente, salvarCliente, excluirCliente,
     orcamento, novoOrcamento, salvarOrcamento, duplicarOrcamento, excluirOrcamento, orcamentoVazio,
     totais, validadeAte, statusExibido, pendencias,
-    salvarItemCatalogo, excluirItemCatalogo,
-    exportar, importar
+    salvarItemCatalogo, excluirItemCatalogo, salvarEmpresa,
+    exportar, importar, marcarBackup, ultimoBackup, temDados, resetar,
+    // nuvem
+    set aoAlterar(fn) { aoAlterar = fn || (() => {}); },
+    marcar, filaAtual, confirmarEnvio, tamanhoFila, registro, aplicarRemoto, marcarTudo,
+    juntarCatalogoDuplicado, substituirPorRemoto
   };
 })();

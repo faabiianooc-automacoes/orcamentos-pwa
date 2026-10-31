@@ -24,7 +24,9 @@
     info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/></svg>',
     doc: '<svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg>',
     pessoas: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/></svg>',
-    fechar: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+    fechar: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    nuvem: '<svg viewBox="0 0 24 24"><path d="M7 18a5 5 0 0 1-.6-9.96A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z"/></svg>',
+    backup: '<svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>'
   };
 
   let toastTimer;
@@ -120,7 +122,21 @@
     const semPreco = db.catalogo.filter(i => st.num(i.valor) <= 0).length;
     if (semPreco) avisos.push(`<a href="#/catalogo">Defina os preços do catálogo</a>: ${semPreco} itens estão sem valor. Exclua os serviços que você não oferece.`);
 
+    let protecao = '';
+    if (window.Nuvem && window.Nuvem.conectado) {
+      protecao = `<a class="status-nuvem" href="#/ajustes">${ICON.nuvem}<span>${esc(textoStatusNuvem())}</span></a>`;
+    } else if (st.temDados()) {
+      const ult = st.ultimoBackup();
+      const dias = ult ? Math.floor((Date.now() - Date.parse(ult)) / 864e5) : null;
+      if (dias === null || dias >= 7) {
+        protecao = `<div class="aviso">${ICON.backup}<div style="flex:1"><p><b>${dias === null ? 'Você ainda não fez backup' : `Último backup há ${dias} dias`}</b></p>
+          <p class="ajuda" style="margin:2px 0 8px">Se o celular for perdido ou trocado, seus clientes e orçamentos só voltam com um backup ou com a <a href="#/ajustes">nuvem ativada</a>.</p>
+          <button class="btn prim" id="bk-inicio">${ICON.backup} Fazer backup agora</button></div></div>`;
+      }
+    }
+
     app.innerHTML = `
+      ${protecao}
       ${avisos.length ? `<div class="aviso">${ICON.alerta}<div><p><b>Para começar</b></p><ul>${avisos.map(a => `<li>${a}</li>`).join('')}</ul></div></div>` : ''}
       <div class="stats">
         <div class="stat"><div class="rot">Orçamentos no mês</div><div class="num">${doMes.length}</div></div>
@@ -131,6 +147,8 @@
       <div class="acoes"><a class="btn prim" href="#/orcamento/novo">${ICON.mais} Novo orçamento</a><a class="btn" href="#/cliente/novo">${ICON.mais} Novo cliente</a></div>
       <h2>Recentes</h2>
       ${listaOrcamentos(db.orcamentos.slice(0, 6))}`;
+    const bk = app.querySelector('#bk-inicio');
+    if (bk) bk.onclick = async () => { if (await fazerBackup()) inicio(); };
   }
 
   function listaOrcamentos(lista) {
@@ -285,12 +303,14 @@
         : '';
     }
 
-    let tSalvar;
+    let tSalvar, sujo = false;
     function agendarSalvar() {
+      sujo = true;
       clearTimeout(tSalvar);
       app.querySelector('#salvo').textContent = 'Salvando…';
       tSalvar = setTimeout(() => {
-        if (st.salvarOrcamento(o)) app.querySelector('#salvo').textContent = 'Salvo automaticamente neste aparelho.';
+        sujo = false;
+        if (st.salvarOrcamento(o)) app.querySelector('#salvo').textContent = 'Salvo automaticamente.';
         atualizarPendencias();
       }, 350);
     }
@@ -446,7 +466,7 @@
       clearTimeout(tSalvar);
       const atual = st.orcamento(o.id);
       if (!atual) return;
-      if (st.orcamentoVazio(o)) st.excluirOrcamento(o.id); else st.salvarOrcamento(o);
+      if (st.orcamentoVazio(o)) st.excluirOrcamento(o.id); else if (sujo) st.salvarOrcamento(o);
     };
 
     desenharItens(); atualizarTotais(); atualizarPendencias();
@@ -621,27 +641,35 @@
       <h2>Catálogo</h2>
       <div class="lista"><a href="#/catalogo">${ICON.lista}<div class="principal"><div class="t1">Itens e preços</div><div class="t2">${st.db.catalogo.length} itens cadastrados</div></div></a></div>
 
+      <h2>Nuvem</h2>
+      <div class="card" id="nuvem"></div>
+
       <h2>Backup</h2>
       <div class="card">
-        <p class="ajuda" style="margin-top:0">Os dados ficam só neste aparelho. Exporte um backup com frequência e importe para levar a outro aparelho.</p>
+        <p class="ajuda" style="margin-top:0">Gera um arquivo com todos os dados. No celular, abre o menu de compartilhar: escolha <b>Drive</b> (ou e-mail) para guardar fora do aparelho.</p>
+        <p class="ajuda" id="ult-bk">${st.ultimoBackup() ? 'Último backup neste aparelho: ' + esc(st.dataBR(st.ultimoBackup())) : 'Nenhum backup feito neste aparelho.'}</p>
         <div class="acoes" style="margin-top:8px">
-          <button class="btn" id="exp">Exportar backup</button>
-          <label class="btn" style="color:var(--text)">Importar backup<input type="file" id="imp" accept="application/json,.json" hidden></label>
+          <button class="btn prim" id="exp">${ICON.backup} Fazer backup</button>
+          <label class="btn" style="color:var(--text)">Restaurar backup<input type="file" id="imp" accept=".json,.txt,application/json,text/plain" hidden></label>
         </div>
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.2.1</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.3.0</p>`;
 
+    // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {
-      Object.assign(st.db.empresa, lerCampos(app.querySelector('#emp')), lerCampos(app.querySelector('#cores')), lerCampos(app.querySelector('#pad')));
-      st.db.empresa.telefone = st.soDigitos(st.db.empresa.telefone);
-      st.db.empresa.validadeDias = parseInt(st.db.empresa.validadeDias, 10) || 15;
-      st.salvar();
+      const dados = { ...lerCampos(app.querySelector('#emp')), ...lerCampos(app.querySelector('#cores')), ...lerCampos(app.querySelector('#pad')) };
+      dados.telefone = st.soDigitos(dados.telefone);
+      dados.validadeDias = parseInt(dados.validadeDias, 10) || 15;
+      const mudou = Object.keys(dados).some(k => String(dados[k]) !== String(st.db.empresa[k] == null ? '' : st.db.empresa[k]));
+      if (mudou) st.salvarEmpresa(dados);
     };
     let t;
-    app.addEventListener('input', () => { clearTimeout(t); t = setTimeout(salvarEmpresa, 300); });
-    limparTela = () => { clearTimeout(t); salvarEmpresa(); };
+    app.addEventListener('input', ev => { if (ev.target.closest('#nuvem')) return; clearTimeout(t); t = setTimeout(salvarEmpresa, 300); });
+    const pararNuvem = window.Nuvem ? window.Nuvem.aoMudarEstado(() => desenharNuvem(app.querySelector('#nuvem'))) : () => {};
+    limparTela = () => { clearTimeout(t); salvarEmpresa(); pararNuvem(); };
+    desenharNuvem(app.querySelector('#nuvem'));
 
     // Prévia das duas cores e aviso de contraste
     const corT = app.querySelector('#e-cor-t'), corF = app.querySelector('#e-cor-f');
@@ -670,22 +698,24 @@
     app.querySelector('#logo').addEventListener('change', async ev => {
       const f = ev.target.files[0]; if (!f) return;
       try {
-        st.db.empresa.logo = await reduzirImagem(f, 400);
-        st.salvar(); toast('Logo atualizado.'); limparTela = null; ajustes();
+        const logo = await reduzirImagem(f, 400);
+        salvarEmpresa(); st.salvarEmpresa({ logo }); toast('Logo atualizado.'); limparTela(); limparTela = null; ajustes();
       } catch (err) { toast('Não foi possível ler a imagem.'); }
     });
     const rl = app.querySelector('#rem-logo');
-    if (rl) rl.onclick = () => { st.db.empresa.logo = ''; st.salvar(); limparTela = null; ajustes(); };
+    if (rl) rl.onclick = () => { salvarEmpresa(); st.salvarEmpresa({ logo: '' }); limparTela(); limparTela = null; ajustes(); };
 
-    app.querySelector('#exp').onclick = () => {
-      const blob = new Blob([st.exportar()], { type: 'application/json' });
-      window.WhatsApp.baixar(blob, `backup-orcamentos-${st.hoje()}.json`);
+    app.querySelector('#exp').onclick = async () => {
+      if (await fazerBackup()) app.querySelector('#ult-bk').textContent = 'Último backup neste aparelho: ' + st.dataBR(st.ultimoBackup());
     };
     app.querySelector('#imp').addEventListener('change', async ev => {
       const f = ev.target.files[0]; if (!f) return;
       const texto = await f.text();
-      if (!(await confirmar('Importar backup', 'Os dados atuais deste aparelho serão substituídos pelos do arquivo. Continuar?', 'Importar'))) return;
-      try { st.importar(texto); toast('Backup importado.'); limparTela = null; ajustes(); }
+      const aviso = window.Nuvem && window.Nuvem.conectado
+        ? 'Os dados deste aparelho serão substituídos pelos do arquivo e enviados para a nuvem. Continuar?'
+        : 'Os dados atuais deste aparelho serão substituídos pelos do arquivo. Continuar?';
+      if (!(await confirmar('Restaurar backup', aviso, 'Restaurar'))) return;
+      try { st.importar(texto); toast('Backup restaurado.'); limparTela(); limparTela = null; ajustes(); }
       catch (err) { toast(err.message || 'Arquivo inválido.'); }
     });
 
@@ -693,6 +723,128 @@
       app.querySelector('#instalar').innerHTML = `<div class="acoes"><button class="btn prim bloco" id="inst">Instalar o app neste aparelho</button></div>`;
       app.querySelector('#inst').onclick = async () => { promptInstalar.prompt(); await promptInstalar.userChoice; promptInstalar = null; ajustes(); };
     }
+  }
+
+  /* ---------- Backup ---------- */
+  // No celular: menu de compartilhar (Drive, e-mail…). Sem suporte: baixa o arquivo.
+  // O arquivo vai como .txt porque o Android não compartilha .json; o conteúdo é JSON.
+  async function fazerBackup() {
+    const texto = st.exportar();
+    const nome = `backup-orcamentos-${st.hoje()}`;
+    const arq = new File([texto], nome + '.txt', { type: 'text/plain' });
+    if (navigator.canShare && navigator.canShare({ files: [arq] })) {
+      try {
+        await navigator.share({ files: [arq], title: 'Backup dos orçamentos', text: 'Backup do app de orçamentos. Para restaurar: Ajustes → Restaurar backup.' });
+        st.marcarBackup(); toast('Backup salvo.'); return true;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return false;
+      }
+    }
+    window.WhatsApp.baixar(new Blob([texto], { type: 'application/json' }), nome + '.json');
+    st.marcarBackup(); toast('Backup baixado. Guarde o arquivo no Drive ou no e-mail.');
+    return true;
+  }
+
+  /* ---------- Nuvem ---------- */
+  const horaBR = iso => iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+  function textoStatusNuvem() {
+    const N = window.Nuvem; if (!N) return '';
+    const e = N.estado, n = N.pendentes();
+    if (e.fase === 'ok') return n ? `Nuvem: enviando ${n} alteração(ões)…` : `Nuvem: sincronizado às ${horaBR(e.ultima)}`;
+    if (e.fase === 'sincronizando') return 'Nuvem: sincronizando…';
+    if (e.fase === 'offline') return `Nuvem: sem internet${n ? ` · ${n} alteração(ões) aguardando` : ''}`;
+    if (e.fase === 'erro') return 'Nuvem: ' + (e.erro || 'erro');
+    if (e.fase === 'carregando') return 'Nuvem: conectando…';
+    return '';
+  }
+
+  function desenharNuvem(el) {
+    if (!el) return;
+    const N = window.Nuvem;
+    const emailDigitado = (el.querySelector('#nv-email') || {}).value || '';
+    const e = N.estado;
+    let html;
+    if (!N.configurada) {
+      html = `<p style="margin-top:0">Guarde clientes, orçamentos e preços na nuvem: se perder ou trocar o celular, basta entrar com sua conta. Também dá para usar no computador. <b>Gratuito</b> (Firebase, do Google).</p>
+        <p class="ajuda">Precisa de uma configuração feita uma única vez no site do Firebase. <a href="https://github.com/faabiianooc-automacoes/orcamentos-pwa/blob/main/FIREBASE.md" target="_blank" rel="noopener">Ver passo a passo</a>.</p>
+        <div class="acoes"><button class="btn prim" id="nv-config">${ICON.nuvem} Configurar nuvem</button></div>`;
+    } else if (e.fase === 'carregando') {
+      html = '<p style="margin:0">Conectando à nuvem…</p>';
+    } else if (!N.conectado) {
+      html = `${e.fase === 'erro' && e.erro ? `<div class="aviso" style="margin-bottom:12px">${ICON.alerta}<p>${esc(e.erro)}</p></div>` : ''}
+        <p style="margin-top:0">Entre para ativar a sincronização. Use sempre a <b>mesma conta</b> em todos os aparelhos.</p>
+        <div class="acoes" style="margin-top:0"><button class="btn prim bloco" id="nv-google">Entrar com Google</button></div>
+        <div class="sep"></div>
+        <div class="campos">
+          <div class="campo"><label for="nv-email">E-mail</label><input id="nv-email" type="email" autocomplete="username" value="${esc(emailDigitado)}"></div>
+          <div class="campo"><label for="nv-senha">Senha</label><input id="nv-senha" type="password" autocomplete="current-password" placeholder="mínimo 6 caracteres"></div>
+        </div>
+        <div class="acoes">
+          <button class="btn" id="nv-entrar">Entrar</button>
+          <button class="btn" id="nv-criar">Criar conta</button>
+        </div>
+        <p class="ajuda"><a href="#" id="nv-esqueci">Esqueci a senha</a> · <a href="#" id="nv-remover">Remover configuração da nuvem</a></p>`;
+    } else {
+      html = `<div class="row" style="align-items:flex-start">${ICON.nuvem}<div style="flex:1"><div><b>Conectado</b> · ${esc(e.email)}</div>
+          <div class="ajuda" id="nv-status">${esc(textoStatusNuvem())}</div></div></div>
+        ${e.fase === 'erro' ? `<p class="ajuda" style="color:var(--warn)">As alterações continuam salvas neste aparelho e serão enviadas quando a nuvem responder.</p>` : ''}
+        <div class="acoes">
+          <button class="btn" id="nv-sync">Sincronizar agora</button>
+          <button class="btn" id="nv-sair">Sair</button>
+        </div>
+`;
+    }
+    el.innerHTML = html;
+    const $ = sel => el.querySelector(sel);
+    const tentar = async (fn, ok) => {
+      try { await fn(); if (ok) toast(ok); }
+      catch (err) { toast(N.mensagemErro(err)); }
+    };
+    if ($('#nv-config')) $('#nv-config').onclick = configurarNuvem;
+    if ($('#nv-google')) $('#nv-google').onclick = () => tentar(() => N.entrarGoogle());
+    const credenciais = () => [$('#nv-email').value, $('#nv-senha').value];
+    if ($('#nv-entrar')) $('#nv-entrar').onclick = () => tentar(() => N.entrarEmail(...credenciais()));
+    if ($('#nv-criar')) $('#nv-criar').onclick = () => tentar(() => N.criarConta(...credenciais()), 'Conta criada.');
+    if ($('#nv-esqueci')) $('#nv-esqueci').onclick = ev => {
+      ev.preventDefault();
+      if (!$('#nv-email').value.trim()) { toast('Digite seu e-mail no campo acima.'); return; }
+      tentar(() => N.redefinirSenha($('#nv-email').value), 'Enviamos um e-mail para redefinir a senha.');
+    };
+    if ($('#nv-remover')) $('#nv-remover').onclick = async ev => {
+      ev.preventDefault();
+      if (await confirmar('Remover configuração', 'O app volta a guardar os dados só neste aparelho. Os dados que já estão na nuvem não são apagados.', 'Remover')) N.removerConfig();
+    };
+    if ($('#nv-sync')) $('#nv-sync').onclick = () => tentar(() => N.sincronizarAgora());
+    if ($('#nv-sair')) $('#nv-sair').onclick = async () => {
+      const r = await dialogo({
+        titulo: 'Sair da nuvem',
+        corpo: `<p style="margin-top:0">Os dados continuam guardados na nuvem.</p><p>Se este aparelho não for seu ou for ficar com outra pessoa, apague os dados dele.</p>`,
+        acoes: [{ rotulo: 'Cancelar', valor: null }, { rotulo: 'Sair e apagar deste aparelho', classe: 'perigo', valor: 'apagar' }, { rotulo: 'Sair', classe: 'prim', valor: 'sair' }]
+      });
+      if (r) tentar(() => N.sair(r === 'apagar'), r === 'apagar' ? 'Você saiu e os dados deste aparelho foram apagados.' : 'Você saiu da nuvem.');
+    };
+  }
+
+  async function configurarNuvem() {
+    let cfg = null;
+    const r = await dialogo({
+      titulo: 'Configurar nuvem',
+      corpo: `<p style="margin-top:0">No console do Firebase, em <b>Configurações do projeto → Seus apps</b>, copie o bloco <code>firebaseConfig</code> e cole abaixo.</p>
+        <textarea id="nv-cfg" rows="9" style="font-family:ui-monospace,monospace;font-size:12.5px" placeholder="const firebaseConfig = {&#10;  apiKey: &quot;...&quot;,&#10;  authDomain: &quot;...&quot;,&#10;  projectId: &quot;...&quot;,&#10;  ...&#10;};"></textarea>
+        <p class="ajuda" id="nv-cfg-erro" style="color:var(--danger)"></p>
+        <p class="ajuda">Essa configuração não é senha: ela só identifica o seu projeto. Quem protege os dados são as regras do Firestore e o seu login.</p>`,
+      acoes: [{ rotulo: 'Cancelar', valor: null }, {
+        rotulo: 'Salvar e conectar', classe: 'prim', valor: 'ok',
+        antes: d => {
+          try { cfg = window.Nuvem.interpretarConfig(d.querySelector('#nv-cfg').value); return true; }
+          catch (err) { d.querySelector('#nv-cfg-erro').textContent = err.message; return false; }
+        }
+      }]
+    });
+    if (r !== 'ok') return;
+    window.Nuvem.salvarConfig(cfg);
+    toast('Configuração salva. Agora entre com sua conta.');
+    window.Nuvem.iniciar();
   }
 
   function reduzirImagem(arquivo, max) {
@@ -826,6 +978,33 @@
 
   if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
+  if (window.Nuvem) {
+    // Primeira conexão de um aparelho que já tem dados e a nuvem também
+    window.Nuvem.perguntar = async () => {
+      const r = await dialogo({
+        titulo: 'Já existem dados na nuvem',
+        corpo: `<p style="margin-top:0">Esta conta já tem clientes e orçamentos na nuvem, e este aparelho também tem dados.</p>
+          <p><b>Usar os da nuvem:</b> os dados deste aparelho são trocados pelos da nuvem.</p>
+          <p><b>Juntar:</b> mantém os dois. Se o mesmo registro existir nos dois lados, fica a versão mais recente.</p>`,
+        acoes: [{ rotulo: 'Juntar os dois', valor: 'juntar' }, { rotulo: 'Usar os da nuvem', classe: 'prim', valor: 'nuvem' }]
+      });
+      return r || 'juntar';
+    };
+    // Dados que chegaram de outro aparelho: atualiza listas (não mexe em telas de edição)
+    window.Nuvem.aoMudarDados(() => {
+      const rota = (location.hash || '#/inicio').split('?')[0].split('/')[1] || 'inicio';
+      if (['inicio', 'orcamentos', 'clientes', 'catalogo'].includes(rota)) {
+        const y = window.scrollY; render(); window.scrollTo(0, y);
+      }
+    });
+    // Status no Início
+    window.Nuvem.aoMudarEstado(() => {
+      const el = document.querySelector('.status-nuvem span');
+      if (el) el.textContent = textoStatusNuvem();
+    });
+    window.Nuvem.iniciar();
   }
   render();
 })();

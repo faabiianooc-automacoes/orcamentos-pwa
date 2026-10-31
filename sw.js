@@ -1,6 +1,6 @@
 /* Service worker: guarda o app no aparelho para funcionar sem internet.
    Ao publicar uma nova versão, aumente VERSAO para forçar a atualização. */
-const VERSAO = 'orcamentos-v1.2.1';
+const VERSAO = 'orcamentos-v1.3.0';
 const ARQUIVOS = [
   './',
   'index.html',
@@ -10,9 +10,13 @@ const ARQUIVOS = [
   'js/store.js',
   'js/pdf.js',
   'js/whatsapp.js',
+  'js/nuvem.js',
   'js/app.js',
   'vendor/jspdf.umd.min.js',
   'vendor/jspdf.plugin.autotable.min.js',
+  'vendor/firebase-app-compat.js',
+  'vendor/firebase-auth-compat.js',
+  'vendor/firebase-firestore-compat.js',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/apple-touch-icon.png'
