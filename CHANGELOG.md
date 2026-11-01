@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.5.0] - 2026-11-01
+- WhatsApp: como o WhatsApp descarta o texto enviado junto com documentos, a mensagem agora é copiada antes do envio e, depois do PDF, o app oferece abrir a conversa do cliente já com o texto.
+- Assinatura gov.br (Opções → Assinar com gov.br e enviar): baixar o PDF, assinar no assinador.iti.br e enviar o PDF assinado ao cliente pelo app.
+
 ## [1.4.0] - 2026-10-31
 - Rubrica automática no PDF: criada a partir de um texto (3 estilos de letra cursiva, em azul de caneta) ou desenhada com o dedo/mouse.
 - Opção "Assinar automaticamente todos os orçamentos" e nome exibido abaixo da assinatura.

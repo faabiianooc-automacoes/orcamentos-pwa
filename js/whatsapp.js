@@ -49,9 +49,11 @@
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
-  /* Retorna: 'compartilhado' | 'cancelado' | 'fallback' */
-  async function enviarPDF(o, blob) {
-    const nome = window.PDF.nomeArquivo(o);
+  /* Retorna: 'compartilhado' | 'cancelado' | 'fallback'
+     Obs.: ao receber um documento, o WhatsApp costuma descartar o texto que vai junto
+     (só imagens viram legenda). Por isso o app copia a mensagem e oferece enviá-la depois. */
+  async function enviarPDF(o, blob, nome) {
+    nome = nome || window.PDF.nomeArquivo(o);
     const arquivo = new File([blob], nome, { type: 'application/pdf' });
     const texto = mensagem(o);
     if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
@@ -67,5 +69,9 @@
     return 'fallback';
   }
 
-  window.WhatsApp = { mensagem, linkConversa, abrirConversa, enviarPDF, baixar, podeCompartilharArquivo };
+  async function copiar(texto) {
+    try { await navigator.clipboard.writeText(texto); return true; } catch (e) { return false; }
+  }
+
+  window.WhatsApp = { mensagem, linkConversa, abrirConversa, enviarPDF, baixar, copiar, podeCompartilharArquivo };
 })();

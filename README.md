@@ -9,7 +9,8 @@ App instalável (PWA) para cadastrar clientes, montar orçamentos, gerar o PDF e
 - **Verificação antes de enviar:** o app lista o que falta (cliente, telefone, itens sem valor, condições de pagamento etc.).
 - **PDF:** A4 com logo, dados da empresa e do cliente, tabela de itens, totais, condições, rubrica automática do responsável e campo de aceite do cliente.
 - **WhatsApp:**
-  - No celular, o botão **Enviar** abre o menu de compartilhar já com o PDF e a mensagem. Basta escolher WhatsApp e o contato.
+  - No celular, o botão **Enviar** abre o menu de compartilhar com o PDF: escolha WhatsApp e o contato. Como o WhatsApp descarta o texto que acompanha documentos, a mensagem fica copiada e, em seguida, o app oferece abrir a conversa do cliente já com ela escrita.
+  - **Assinar com gov.br e enviar** (em Opções do orçamento): baixa o PDF, abre o assinador.iti.br e envia o PDF assinado. A API de assinatura do gov.br é restrita a órgãos públicos, por isso a assinatura é feita no site do gov.br.
   - No computador (ou em navegadores sem suporte), o PDF é baixado e o app abre a conversa do contato cadastrado com a mensagem pronta, para você anexar o arquivo.
   - Em **Opções → Mensagem para o cliente**, o app abre direto a conversa do contato cadastrado, só com o texto.
 - **Catálogo:** mais de 70 itens de eletricista residencial e automação, por categoria, todos sem preço para você definir. Busca e filtro por categoria.

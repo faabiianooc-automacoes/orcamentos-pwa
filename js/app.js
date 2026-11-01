@@ -421,24 +421,75 @@
       setTimeout(() => URL.revokeObjectURL(url), 120000);
     };
 
-    app.querySelector('#enviar').onclick = async () => {
-      if (!(await checarAntes(true))) return;
-      st.salvarOrcamento(o);
+    // Envia um PDF (gerado ou assinado no gov.br) e, depois, a mensagem
+    async function enviarParaCliente(blob, nomeArq) {
       const c = st.cliente(o.clienteId);
-      const blob = window.PDF.gerar(o);
-      const r = await window.WhatsApp.enviarPDF(o, blob);
+      const msg = window.WhatsApp.mensagem(o);
+      const copiada = await window.WhatsApp.copiar(msg); // antes do compartilhar, ainda no toque do usuário
+      const r = await window.WhatsApp.enviarPDF(o, blob, nomeArq);
       if (r === 'cancelado') return;
-      if (o.status === 'Rascunho') { o.status = 'Enviado'; o.enviadoEm = new Date().toISOString(); st.salvarOrcamento(o); app.querySelector('#f-st').value = 'Enviado'; }
-      if (r === 'compartilhado') { toast('Pronto! Orçamento marcado como enviado.'); return; }
+      if (o.status === 'Rascunho') { o.status = 'Enviado'; o.enviadoEm = new Date().toISOString(); st.salvarOrcamento(o); const sel = app.querySelector('#f-st'); if (sel) sel.value = 'Enviado'; }
+      if (r === 'compartilhado') {
+        const enviar = await dialogo({
+          titulo: 'Agora envie a mensagem',
+          corpo: `<p style="margin-top:0">O WhatsApp entrega o PDF <b>sem o texto</b>: ele ignora mensagens enviadas junto com documentos.</p>
+            ${copiada ? '<p>A mensagem já está <b>copiada</b>. Na conversa, toque e segure no campo de texto e escolha <b>Colar</b>.</p>' : ''}
+            <p>${copiada ? 'Ou toque' : 'Toque'} abaixo para abrir a conversa com <b>${esc(c.nome)}</b> já com a mensagem escrita.</p>`,
+          acoes: [{ rotulo: 'Pronto', valor: false }, { rotulo: 'Enviar mensagem', classe: 'prim', valor: true }]
+        });
+        if (enviar) window.WhatsApp.abrirConversa(c.telefone, msg);
+        else toast('Orçamento marcado como enviado.');
+        return;
+      }
       // Plano B: PDF baixado; abre a conversa com o contato cadastrado
       const abrir = await dialogo({
         titulo: 'Anexe o PDF na conversa',
-        corpo: `<p style="margin-top:0">Este navegador não permite anexar arquivos direto no WhatsApp. O PDF <b>${esc(window.PDF.nomeArquivo(o))}</b> foi baixado.</p>
+        corpo: `<p style="margin-top:0">Este navegador não permite anexar arquivos direto no WhatsApp. O PDF <b>${esc(nomeArq || window.PDF.nomeArquivo(o))}</b> foi baixado.</p>
           <p>Abra a conversa com <b>${esc(c.nome)}</b> (${esc(st.telefoneFmt(c.telefone))}). A mensagem já vai escrita; depois anexe o PDF pelo clipe.</p>`,
         acoes: [{ rotulo: 'Fechar', valor: false }, { rotulo: 'Abrir conversa', classe: 'prim', valor: true }]
       });
-      if (abrir) window.WhatsApp.abrirConversa(c.telefone, window.WhatsApp.mensagem(o));
+      if (abrir) window.WhatsApp.abrirConversa(c.telefone, msg);
+    }
+
+    app.querySelector('#enviar').onclick = async () => {
+      if (!(await checarAntes(true))) return;
+      st.salvarOrcamento(o);
+      await enviarParaCliente(window.PDF.gerar(o));
     };
+
+    // Assinatura gov.br: o app não pode assinar sozinho (a API é só para órgãos públicos).
+    // Fluxo: baixar PDF → assinar no assinador.iti.br → escolher o PDF assinado → enviar.
+    async function assinarGovbr() {
+      if (!(await checarAntes(true))) return;
+      st.salvarOrcamento(o);
+      const arq = await dialogo({
+        titulo: 'Assinar com gov.br',
+        corpo: `<p style="margin-top:0">Assinatura digital gratuita e com validade jurídica. Precisa de conta gov.br <b>prata ou ouro</b>.</p>
+          <ol class="passos">
+            <li><b>Baixe o PDF</b> do orçamento.<div class="acoes" style="margin-top:6px"><button class="btn" type="button" id="gb-baixar">${ICON.pdf} Baixar PDF</button></div></li>
+            <li><b>Assine no gov.br:</b> entre, envie o PDF, posicione a assinatura e baixe o arquivo assinado.<div class="acoes" style="margin-top:6px"><a class="btn" href="https://assinador.iti.br/" target="_blank" rel="noopener">Abrir assinador gov.br</a></div></li>
+            <li><b>Escolha o PDF assinado</b> para enviar ao cliente.<div class="acoes" style="margin-top:6px"><label class="btn prim">Escolher PDF assinado<input type="file" id="gb-arq" accept="application/pdf,.pdf" hidden></label></div></li>
+          </ol>
+          <p class="ajuda">Não edite o PDF depois de assinado: qualquer mudança invalida a assinatura.</p>`,
+        acoes: [],
+        aoAbrir: (d, fechar) => {
+          d.querySelector('#gb-baixar').onclick = () => window.WhatsApp.baixar(window.PDF.gerar(o), window.PDF.nomeArquivo(o));
+          d.querySelector('#gb-arq').addEventListener('change', ev => { const f = ev.target.files[0]; if (f) fechar(f); });
+        }
+      });
+      if (!arq) return;
+      if (!/pdf$/i.test(arq.type) && !/\.pdf$/i.test(arq.name)) { toast('Escolha um arquivo PDF.'); return; }
+      const nomeAss = window.PDF.nomeArquivo(o).replace(/\.pdf$/, '-assinado.pdf');
+      // um toque novo é necessário para abrir o menu de compartilhar
+      const ok = await dialogo({
+        titulo: 'PDF assinado pronto',
+        corpo: `<p style="margin-top:0"><b>${esc(arq.name)}</b> será enviado como <b>${esc(nomeAss)}</b>.</p>`,
+        acoes: [{ rotulo: 'Cancelar', valor: false }, { rotulo: 'Enviar no WhatsApp', classe: 'prim', valor: true }]
+      });
+      if (!ok) return;
+      o.assinadoGovbr = true; st.salvarOrcamento(o);
+      await enviarParaCliente(arq, nomeAss);
+    }
 
     document.getElementById('mais').onclick = async () => {
       const c = st.cliente(o.clienteId);
@@ -446,6 +497,7 @@
         titulo: 'Opções',
         corpo: `<div class="lista">
           ${c && st.telefoneValido(c.telefone) ? `<button class="linha" data-op="msg">${ICON.conversa}<div class="principal"><div class="t1">Mensagem para ${esc(c.nome)}</div><div class="t2">Abre a conversa no WhatsApp só com o texto</div></div></button>` : ''}
+          <button class="linha" data-op="govbr">${ICON.enviar}<div class="principal"><div class="t1">Assinar com gov.br e enviar</div><div class="t2">Assinatura digital gratuita, com validade jurídica</div></div></button>
           <button class="linha" data-op="baixar">${ICON.pdf}<div class="principal"><div class="t1">Baixar PDF</div></div></button>
           <button class="linha" data-op="dup">${ICON.copiar}<div class="principal"><div class="t1">Duplicar orçamento</div></div></button>
           <button class="linha" data-op="exc" style="color:var(--danger)">${ICON.lixo}<div class="principal"><div class="t1">Excluir orçamento</div></div></button>
@@ -454,6 +506,7 @@
         aoAbrir: (d, fechar) => d.querySelector('.lista').addEventListener('click', e => { const b = e.target.closest('[data-op]'); if (b) fechar(b.dataset.op); })
       });
       if (r === 'msg') window.WhatsApp.abrirConversa(c.telefone, window.WhatsApp.mensagem(o));
+      if (r === 'govbr') assinarGovbr();
       if (r === 'baixar') { if (await checarAntes(false)) window.WhatsApp.baixar(window.PDF.gerar(o), window.PDF.nomeArquivo(o)); }
       if (r === 'dup') { const n = st.duplicarOrcamento(o); toast('Cópia criada: ' + n.numero); location.hash = '#/orcamento/' + n.id; }
       if (r === 'exc' && await confirmar('Excluir orçamento', `Excluir ${esc(o.numero)}? Não dá para desfazer.`, 'Excluir')) {
@@ -670,7 +723,7 @@
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.4.0</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.5.0</p>`;
 
     // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {
