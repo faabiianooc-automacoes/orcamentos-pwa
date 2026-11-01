@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.6.0] - 2026-11-01
+- Importar contatos para a base de clientes: pela agenda do celular (Chrome no Android, só os contatos escolhidos) ou por arquivo .vcf (Android, iPhone, Google Contatos).
+- Prévia antes de importar: busca, marcar/desmarcar, aviso de já cadastrado, repetido e sem telefone; prefere o celular ao fixo e remove o +55.
+
 ## [1.5.0] - 2026-11-01
 - WhatsApp: como o WhatsApp descarta o texto enviado junto com documentos, a mensagem agora é copiada antes do envio e, depois do PDF, o app oferece abrir a conversa do cliente já com o texto.
 - Assinatura gov.br (Opções → Assinar com gov.br e enviar): baixar o PDF, assinar no assinador.iti.br e enviar o PDF assinado ao cliente pelo app.

@@ -4,7 +4,7 @@ App instalável (PWA) para cadastrar clientes, montar orçamentos, gerar o PDF e
 
 ## Funcionalidades
 
-- **Clientes:** nome, WhatsApp com DDD, e-mail, CPF/CNPJ, endereço da instalação, tipo de imóvel e observações.
+- **Clientes:** nome, WhatsApp com DDD, e-mail, CPF/CNPJ, endereço da instalação, tipo de imóvel e observações. **Importar contatos** pela agenda do celular (Chrome no Android) ou por arquivo .vcf, com prévia e aviso de duplicados.
 - **Orçamentos:** numeração automática (`ORC-2026-0001`), itens do catálogo ou avulsos, desconto em % ou R$, validade, prazo, pagamento, garantia, observações e status (Rascunho, Enviado, Aprovado, Recusado; "Vencido" é calculado).
 - **Verificação antes de enviar:** o app lista o que falta (cliente, telefone, itens sem valor, condições de pagamento etc.).
 - **PDF:** A4 com logo, dados da empresa e do cliente, tabela de itens, totais, condições, rubrica automática do responsável e campo de aceite do cliente.
@@ -73,6 +73,7 @@ js/catalogo-padrao.js   Itens iniciais do catálogo (edite aqui para incluir ser
 js/store.js             Dados, cálculos, validações e backup
 js/pdf.js               Geração do PDF
 js/whatsapp.js          Compartilhar e links do WhatsApp
+js/contatos.js          Importação de contatos (agenda do celular e .vcf)
 js/nuvem.js             Login e sincronização com o Firebase (carregado só se configurado)
 js/app.js               Telas e navegação
 vendor/                 jsPDF 2.5.1, jsPDF-AutoTable 3.8.2 (MIT) e Firebase JS SDK 10.14.1 compat (Apache-2.0)

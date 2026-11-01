@@ -1,6 +1,6 @@
 /* Service worker: guarda o app no aparelho para funcionar sem internet.
    Ao publicar uma nova versão, aumente VERSAO para forçar a atualização. */
-const VERSAO = 'orcamentos-v1.5.0';
+const VERSAO = 'orcamentos-v1.6.0';
 const ARQUIVOS = [
   './',
   'index.html',
@@ -11,6 +11,7 @@ const ARQUIVOS = [
   'js/pdf.js',
   'js/whatsapp.js',
   'js/nuvem.js',
+  'js/contatos.js',
   'js/app.js',
   'vendor/jspdf.umd.min.js',
   'vendor/jspdf.plugin.autotable.min.js',

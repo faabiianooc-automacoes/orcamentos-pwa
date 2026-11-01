@@ -293,6 +293,17 @@
     db.clientes = db.clientes.filter(c => c.id !== id);
     salvar(); marcarExclusao('clientes', id);
   }
+  // Vários clientes de uma vez (importação de contatos): grava uma vez só
+  function adicionarClientes(lista) {
+    const agora = new Date().toISOString();
+    lista.forEach(c => {
+      c.id = uid(); c.criadoEm = agora; c.atualizadoEm = agora;
+      db.clientes.push(c);
+      fila.pend['clientes/' + c.id] = Date.now() + '.' + (++contadorMarca);
+    });
+    salvar(); gravarFila(); aoAlterar();
+    return lista.length;
+  }
 
   /* ---------- Orçamentos ---------- */
   const orcamento = id => db.orcamentos.find(o => o.id === id) || null;
@@ -431,7 +442,7 @@
     CORES_PADRAO, hexParaRgb, contraste, textoSobre, clarear,
     uid, hoje, num, brl, dec, qtdFmt, dataBR, somarDias,
     soDigitos, telefoneInternacional, telefoneFmt, telefoneValido,
-    salvar, cliente, salvarCliente, excluirCliente,
+    salvar, cliente, salvarCliente, excluirCliente, adicionarClientes,
     orcamento, novoOrcamento, salvarOrcamento, duplicarOrcamento, excluirOrcamento, orcamentoVazio,
     totais, validadeAte, statusExibido, pendencias,
     salvarItemCatalogo, excluirItemCatalogo, salvarEmpresa,

@@ -531,8 +531,10 @@
     topo('Clientes');
     app.innerHTML = `
       <div class="busca">${ICON.busca}<input type="search" id="q" placeholder="Buscar por nome, telefone ou cidade" aria-label="Buscar"></div>
+      <div class="acoes" style="margin:0 0 12px"><button class="btn" id="importar" type="button">${ICON.pessoas} Importar contatos</button></div>
       <div id="res"></div>
       <a class="fab" href="#/cliente/novo">${ICON.mais} Novo</a>`;
+    app.querySelector('#importar').onclick = importarContatos;
     const q = app.querySelector('#q');
     const atualizar = () => {
       const t = q.value.trim().toLowerCase();
@@ -547,6 +549,96 @@
     };
     q.addEventListener('input', atualizar);
     atualizar();
+  }
+
+  /* ---------- Importar contatos ---------- */
+  async function importarContatos() {
+    const C = window.Contatos;
+    const agenda = C.suportaAgenda();
+    const origem = await dialogo({
+      titulo: 'Importar contatos',
+      corpo: `${agenda ? `<button class="btn prim bloco" type="button" id="ic-agenda">${ICON.pessoas} Escolher na agenda do celular</button>
+          <p class="ajuda">Abre a sua agenda: marque os clientes e confirme. O app só recebe os contatos que você escolher.</p><div class="sep"></div>` : ''}
+        <label class="btn bloco" style="color:var(--text)">Importar arquivo de contatos (.vcf)<input type="file" id="ic-arq" accept=".vcf,text/vcard,text/x-vcard" hidden></label>
+        <details class="ajuda" style="margin-top:10px"><summary>Como gerar o arquivo .vcf</summary>
+          <ul style="padding-left:18px;margin:6px 0 0">
+            <li><b>Android:</b> app Contatos → ☰ ou ⋮ → <i>Corrigir e gerenciar</i> → <i>Exportar para arquivo</i>.</li>
+            <li><b>iPhone:</b> app Contatos → <i>Listas</i> → toque e segure em <i>Todos os contatos</i> → <i>Exportar</i>.</li>
+            <li><b>Computador:</b> contacts.google.com → <i>Exportar</i> → <i>vCard</i>.</li>
+          </ul></details>
+        ${agenda ? '' : '<p class="ajuda">Neste navegador não dá para abrir a agenda direto (só o Chrome no Android permite). Use o arquivo .vcf.</p>'}
+        <p class="ajuda" id="ic-erro" style="color:var(--danger)"></p>`,
+      acoes: [],
+      aoAbrir: (d, fechar) => {
+        const b = d.querySelector('#ic-agenda');
+        if (b) b.onclick = async () => {
+          try { const l = await C.escolherDaAgenda(); if (l.length) fechar({ lista: l, daAgenda: true }); }
+          catch (e) { d.querySelector('#ic-erro').textContent = 'Não foi possível abrir a agenda: ' + (e.message || e); }
+        };
+        d.querySelector('#ic-arq').addEventListener('change', async ev => {
+          const f = ev.target.files[0]; if (!f) return;
+          try {
+            const l = C.lerVcf(await f.text());
+            if (!l.length) { d.querySelector('#ic-erro').textContent = 'Nenhum contato encontrado neste arquivo.'; return; }
+            fechar({ lista: l, daAgenda: false });
+          } catch (e) { d.querySelector('#ic-erro').textContent = 'Arquivo inválido.'; }
+        });
+      }
+    });
+    if (!origem) return;
+
+    const itens = C.marcarDuplicados(origem.lista);
+    const novos = itens.filter(i => !i.existe && !i.repetido).length;
+    const jaTem = itens.length - novos;
+    // Da agenda: o usuário já escolheu, vem marcado. Do arquivo (agenda inteira): vem desmarcado.
+    const marcadoPadrao = i => origem.daAgenda && !i.existe && !i.repetido;
+    let escolhidos = [];
+    const r = await dialogo({
+      titulo: `${itens.length} contato(s) encontrado(s)`,
+      corpo: `<p class="ajuda" style="margin-top:0">${jaTem ? `${jaTem} já cadastrado(s) ou repetido(s), desmarcado(s). ` : ''}Marque só quem é cliente.</p>
+        <div class="busca">${ICON.busca}<input type="search" id="ic-q" placeholder="Buscar contato"></div>
+        <div class="row" style="justify-content:space-between;margin-bottom:8px">
+          <span class="ajuda" id="ic-n"></span>
+          <span><button class="chip" type="button" id="ic-todos">Marcar visíveis</button> <button class="chip" type="button" id="ic-nenhum">Desmarcar</button></span>
+        </div>
+        <div class="lista" id="ic-lista">${itens.map((i, n) => `
+          <label class="linha" data-i="${n}" style="cursor:pointer"><input type="checkbox" value="${n}" ${marcadoPadrao(i) ? 'checked' : ''} style="width:20px;min-height:20px">
+            <div class="principal"><div class="t1">${esc(i.nome || st.telefoneFmt(i.telefone))}</div>
+            <div class="t2">${i.telefone ? esc(st.telefoneFmt(i.telefone)) : 'sem telefone'}${i.cidade ? ' · ' + esc(i.cidade) : ''}</div></div>
+            ${i.existe ? '<span class="badge b-rascunho">já cadastrado</span>' : i.repetido ? '<span class="badge b-rascunho">repetido</span>' : !i.telefone ? '<span class="badge b-vencido">sem telefone</span>' : ''}
+          </label>`).join('')}</div>`,
+      acoes: [{ rotulo: 'Cancelar', valor: null }, {
+        rotulo: 'Importar', classe: 'prim', valor: 'ok',
+        antes: d => {
+          escolhidos = [...d.querySelectorAll('#ic-lista input:checked')].map(x => itens[Number(x.value)]);
+          if (!escolhidos.length) { toast('Marque pelo menos um contato.'); return false; }
+          return true;
+        }
+      }],
+      aoAbrir: d => {
+        const contar = () => {
+          const n = d.querySelectorAll('#ic-lista input:checked').length;
+          d.querySelector('#ic-n').textContent = `${n} marcado(s)`;
+          const b = [...d.querySelectorAll('.dlg-rod .btn')].pop(); if (b) b.textContent = n ? `Importar ${n}` : 'Importar';
+        };
+        d.querySelector('#ic-lista').addEventListener('change', contar);
+        d.querySelector('#ic-q').addEventListener('input', e => {
+          const t = e.target.value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+          d.querySelectorAll('#ic-lista .linha').forEach(l => { l.hidden = !!t && !l.textContent.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(t); });
+        });
+        d.querySelector('#ic-todos').onclick = () => { d.querySelectorAll('#ic-lista .linha:not([hidden]) input').forEach(x => { x.checked = true; }); contar(); };
+        d.querySelector('#ic-nenhum').onclick = () => { d.querySelectorAll('#ic-lista input').forEach(x => { x.checked = false; }); contar(); };
+        contar();
+      }
+    });
+    if (r !== 'ok') return;
+    const n = st.adicionarClientes(escolhidos.map(i => ({
+      nome: i.nome || st.telefoneFmt(i.telefone), telefone: i.telefone, email: i.email || '',
+      documento: '', tipoImovel: '', endereco: i.endereco || '', cidade: i.cidade || '', observacoes: i.observacoes || ''
+    })));
+    const semTel = escolhidos.filter(i => !i.telefone).length;
+    toast(`${n} cliente(s) importado(s).${semTel ? ` ${semTel} sem telefone: complete antes de enviar orçamentos.` : ''}`);
+    clientes();
   }
 
   function camposCliente(c) {
@@ -723,7 +815,7 @@
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.5.0</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.6.0</p>`;
 
     // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {
