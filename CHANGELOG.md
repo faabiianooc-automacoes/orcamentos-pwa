@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.7.0] - 2026-11-03
+- Data prevista de início no orçamento (obrigatória para gerar o PDF e enviar); aparece no PDF e pode ir na mensagem do WhatsApp com {inicio}.
+- Novo status "Concluído" para orçamentos já executados.
+- Início: painel "Agenda" com orçamentos a vencer em 7 dias (e já vencidos) e a executar (atrasados, próximos 7 dias, depois, sem data), mais a lista dos próximos compromissos. Cada cartão abre o relatório já filtrado.
+- Nova aba Relatórios: filtros de período, data considerada (emissão, início previsto ou validade), status, cliente e busca; atalhos A vencer, Vencidos, A executar e Início atrasado; totais, taxa de aprovação, ticket médio, valores por status, por tipo de item e principais clientes; exportação em CSV.
+
 ## [1.6.0] - 2026-11-01
 - Importar contatos para a base de clientes: pela agenda do celular (Chrome no Android, só os contatos escolhidos) ou por arquivo .vcf (Android, iPhone, Google Contatos).
 - Prévia antes de importar: busca, marcar/desmarcar, aviso de já cadastrado, repetido e sem telefone; prefere o celular ao fixo e remove o +55.

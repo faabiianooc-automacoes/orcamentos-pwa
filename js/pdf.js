@@ -57,8 +57,9 @@
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(90, 100, 110);
     doc.text(`Emissão: ${st.dataBR(o.data)}`, W - M, y + 16, { align: 'right' });
     doc.text(`Válido até: ${st.dataBR(st.validadeAte(o))}`, W - M, y + 20, { align: 'right' });
+    if (o.dataInicio) doc.text(`Início previsto: ${st.dataBR(o.dataInicio)}`, W - M, y + 24, { align: 'right' });
 
-    y += 28;
+    y += o.dataInicio ? 31 : 28;
     doc.setDrawColor(...corF); doc.setLineWidth(0.8); doc.line(M, y, W - M, y);
     y += 7;
 

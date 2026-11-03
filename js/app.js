@@ -1,6 +1,6 @@
 /* Telas e navegação do app. Rotas por hash:
    #/inicio · #/orcamentos · #/orcamento/:id · #/clientes · #/cliente/:id|novo
-   #/ajustes · #/catalogo */
+   #/ajustes · #/catalogo · #/relatorios?visao=avencer|executar|atrasados */
 (function () {
   'use strict';
   const st = window.Store;
@@ -26,7 +26,11 @@
     pessoas: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/></svg>',
     fechar: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     nuvem: '<svg viewBox="0 0 24 24"><path d="M7 18a5 5 0 0 1-.6-9.96A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z"/></svg>',
-    backup: '<svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>'
+    backup: '<svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
+    relogio: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    agenda: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+    filtro: '<svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>',
+    seta: '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>'
   };
 
   let toastTimer;
@@ -40,8 +44,11 @@
   st.aoFalhar = () => toast('Não foi possível salvar: armazenamento cheio ou bloqueado.');
 
   function badge(o) {
-    const s = st.statusExibido(o);
-    return `<span class="badge b-${s.toLowerCase()}">${esc(s)}</span>`;
+    return badgeStatus(st.statusExibido(o));
+  }
+  function badgeStatus(s) {
+    const cls = s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return `<span class="badge b-${cls}">${esc(s)}</span>`;
   }
 
   /* Diálogo genérico. acoes: [{rotulo, classe, valor}] → resolve com o valor */
@@ -98,7 +105,7 @@
     const novo = app.cloneNode(false);
     app.replaceWith(novo);
     app = novo;
-    const telas = { inicio, orcamentos, orcamento: editorOrcamento, clientes, cliente: formCliente, ajustes, catalogo };
+    const telas = { inicio, orcamentos, orcamento: editorOrcamento, clientes, cliente: formCliente, ajustes, catalogo, relatorios };
     (telas[rota] || inicio)(id);
     window.scrollTo(0, 0);
   }
@@ -112,8 +119,8 @@
     const mes = st.hoje().slice(0, 7);
     const doMes = db.orcamentos.filter(o => (o.data || '').startsWith(mes));
     const abertos = db.orcamentos.filter(o => st.statusExibido(o) === 'Enviado');
-    const aprovados = db.orcamentos.filter(o => o.status === 'Aprovado');
-    const decididos = db.orcamentos.filter(o => o.status === 'Aprovado' || o.status === 'Recusado').length;
+    const aprovados = db.orcamentos.filter(o => o.status === 'Aprovado' || o.status === 'Concluído');
+    const decididos = aprovados.length + db.orcamentos.filter(o => o.status === 'Recusado').length;
     const soma = l => l.reduce((s, o) => s + st.totais(o).total, 0);
     const taxa = decididos ? Math.round(aprovados.length / decididos * 100) + '%' : '-';
 
@@ -138,6 +145,8 @@
     app.innerHTML = `
       ${protecao}
       ${avisos.length ? `<div class="aviso">${ICON.alerta}<div><p><b>Para começar</b></p><ul>${avisos.map(a => `<li>${a}</li>`).join('')}</ul></div></div>` : ''}
+      ${painelAgenda()}
+      <h2>Resumo</h2>
       <div class="stats">
         <div class="stat"><div class="rot">Orçamentos no mês</div><div class="num">${doMes.length}</div></div>
         <div class="stat"><div class="rot">Aguardando resposta</div><div class="num">${st.brl(soma(abertos))}</div></div>
@@ -151,13 +160,72 @@
     if (bk) bk.onclick = async () => { if (await fazerBackup()) inicio(); };
   }
 
-  function listaOrcamentos(lista) {
+  /* Texto relativo: "hoje", "amanhã", "em 3 dias", "há 2 dias" */
+  function relativo(iso) {
+    const d = st.diasEntre(st.hoje(), iso);
+    if (d === 0) return 'hoje';
+    if (d === 1) return 'amanhã';
+    if (d === -1) return 'ontem';
+    return d > 0 ? `em ${d} dias` : `há ${-d} dias`;
+  }
+
+  /* Painel do Início: orçamentos a vencer e a executar */
+  function painelAgenda() {
+    const a = st.agenda(7);
+    const soma = l => l.reduce((s, o) => s + st.totais(o).total, 0);
+    const detExec = [
+      a.atrasados.length && `<span class="tx-perigo">${a.atrasados.length} atrasado(s)</span>`,
+      a.proximos.length && `${a.proximos.length} nos próximos 7 dias`,
+      a.depois.length && `${a.depois.length} depois`,
+      a.semData.length && `<span class="tx-alerta">${a.semData.length} sem data de início</span>`
+    ].filter(Boolean).join(' · ') || 'Nenhum orçamento aprovado aguardando execução';
+    const detVenc = a.aVencer.length
+      ? `${st.brl(soma(a.aVencer))} aguardando resposta`
+      : 'Nenhum vence nos próximos 7 dias';
+
+    // Próximos compromissos: atrasados + inícios em 7 dias + validades em 7 dias
+    const itens = [
+      ...a.atrasados.map(o => ({ o, data: o.dataInicio, tipo: 'exec' })),
+      ...a.proximos.map(o => ({ o, data: o.dataInicio, tipo: 'exec' })),
+      ...a.aVencer.map(o => ({ o, data: st.validadeAte(o), tipo: 'venc' }))
+    ].sort((x, y) => x.data.localeCompare(y.data)).slice(0, 6);
+    const hoje = st.hoje();
+    const lista = itens.length ? `<div class="lista">${itens.map(({ o, data, tipo }) => {
+      const c = st.cliente(o.clienteId);
+      const atras = tipo === 'exec' && data < hoje;
+      const rot = tipo === 'exec' ? (atras ? `Início atrasado (${st.dataBR(data)})` : `Início ${relativo(data)} · ${st.dataBR(data)}`) : `Vence ${relativo(data)} · ${st.dataBR(data)}`;
+      return `<a href="#/orcamento/${o.id}">
+        <span class="ag-ic ${tipo === 'exec' ? (atras ? 'perigo' : 'ok') : 'alerta'}">${tipo === 'exec' ? ICON.agenda : ICON.relogio}</span>
+        <div class="principal"><div class="t1">${esc(c ? c.nome : 'Sem cliente')}</div>
+        <div class="t2">${esc(rot)} · ${esc(o.numero)}</div></div>
+        <div class="valor">${st.brl(st.totais(o).total)}</div></a>`;
+    }).join('')}</div>` : '';
+
+    return `
+      <h2>Agenda</h2>
+      <div class="painel">
+        <a class="pcard alerta" href="#/relatorios?visao=avencer">
+          <div class="pc-topo">${ICON.relogio}<span>A vencer em 7 dias</span></div>
+          <div class="pc-num">${a.aVencer.length}</div>
+          <div class="pc-det">${detVenc}${a.vencidos.length ? ` · <span class="tx-perigo">${a.vencidos.length} já vencido(s)</span>` : ''}</div>
+        </a>
+        <a class="pcard ok" href="#/relatorios?visao=executar">
+          <div class="pc-topo">${ICON.agenda}<span>A executar</span></div>
+          <div class="pc-num">${a.aExecutar.length}</div>
+          <div class="pc-det">${detExec}</div>
+        </a>
+      </div>
+      ${lista ? `<h2 class="sub">Próximos 7 dias</h2>${lista}` : ''}`;
+  }
+
+  /* data: função opcional que devolve o texto de data da linha */
+  function listaOrcamentos(lista, data) {
     if (!lista.length) return `<div class="lista"><div class="vazio">${ICON.doc}<p>Nenhum orçamento ainda.</p></div></div>`;
     return `<div class="lista">${lista.map(o => {
       const c = st.cliente(o.clienteId);
       return `<a href="#/orcamento/${o.id}">
         <div class="principal"><div class="t1">${esc(c ? c.nome : 'Sem cliente')}</div>
-        <div class="t2">${esc(o.numero)} · ${esc(st.dataBR(o.data))}${o.titulo ? ' · ' + esc(o.titulo) : ''}</div></div>
+        <div class="t2">${esc(o.numero)} · ${esc(data ? data(o) : st.dataBR(o.data))}${o.titulo ? ' · ' + esc(o.titulo) : ''}</div></div>
         <div><div class="valor">${st.brl(st.totais(o).total)}</div><div class="direita">${badge(o)}</div></div></a>`;
     }).join('')}</div>`;
   }
@@ -229,7 +297,8 @@
           <input id="f-tit" data-f="titulo" value="${esc(o.titulo)}" placeholder="Ex.: Monitoramento da caixa-d'água e vazamentos"></div>
         <div class="campo c2 m3"><label for="f-data">Data</label><input id="f-data" type="date" data-f="data" value="${esc(o.data)}"></div>
         <div class="campo c2 m3"><label for="f-val">Validade (dias)</label><input id="f-val" type="number" min="1" inputmode="numeric" data-f="validadeDias" value="${esc(o.validadeDias)}"></div>
-        <div class="campo c2"><label for="f-st">Status</label><select id="f-st" data-f="status">${opt(st.STATUS, o.status)}</select></div>
+        <div class="campo c2 m3"><label for="f-ini">Início previsto <span class="obrig">*</span></label><input id="f-ini" type="date" data-f="dataInicio" value="${esc(o.dataInicio || '')}"></div>
+        <div class="campo c2 m3"><label for="f-st">Status</label><select id="f-st" data-f="status">${opt(st.STATUS, o.status)}</select></div>
       </div></div>
 
       <h2>Itens</h2>
@@ -337,6 +406,8 @@
     app.addEventListener('change', ev => {
       const el = ev.target;
       if (el.dataset.f === 'status' && el.value === 'Enviado' && !o.enviadoEm) o.enviadoEm = new Date().toISOString();
+      if (el.dataset.f === 'status' && el.value === 'Concluído' && !o.concluidoEm) o.concluidoEm = new Date().toISOString();
+      if (el.dataset.f === 'dataInicio') el.classList.toggle('invalido', !el.value);
     });
     app.addEventListener('focusout', ev => {
       const el = ev.target;
@@ -405,6 +476,7 @@
       const r = await dialogo({
         titulo: bloqueia ? 'Faltam informações' : 'Confira antes de gerar',
         corpo: `<ul style="margin:0;padding-left:18px">${p.map(x => `<li>${esc(x.msg)}${x.bloqueia ? ' <b>(obrigatório)</b>' : ''}</li>`).join('')}</ul>`,
+        aoAbrir: () => { const ini = app.querySelector('#f-ini'); if (ini && !ini.value) ini.classList.add('invalido'); },
         acoes: bloqueia ? [{ rotulo: 'Corrigir', classe: 'prim', valor: false }]
           : [{ rotulo: 'Corrigir', valor: false }, { rotulo: 'Gerar mesmo assim', classe: 'prim', valor: true }]
       });
@@ -523,6 +595,199 @@
     };
 
     desenharItens(); atualizarTotais(); atualizarPendencias();
+  }
+
+  /* ---------- Relatórios ---------- */
+  const STATUS_REL = ['Rascunho', 'Enviado', 'Vencido', 'Aprovado', 'Concluído', 'Recusado'];
+  const PERIODOS = [
+    ['mes', 'Este mês'], ['mesPassado', 'Mês passado'], ['30', 'Últimos 30 dias'], ['90', 'Últimos 90 dias'],
+    ['ano', 'Este ano'], ['prox7', 'Próximos 7 dias'], ['prox30', 'Próximos 30 dias'], ['tudo', 'Todo o período'], ['pers', 'Personalizado']
+  ];
+  const BASES = [['data', 'Emissão'], ['inicio', 'Início previsto'], ['validade', 'Validade']];
+  const filtroRelPadrao = () => ({ periodo: 'mes', de: '', ate: '', base: 'data', status: [], cliente: '', busca: '' });
+  let filtroRel = filtroRelPadrao();
+
+  function intervalo(f) {
+    const h = st.hoje(), [a, m] = h.split('-').map(Number);
+    const ultimoDia = (ano, mes) => new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+    const mm = n => String(n).padStart(2, '0');
+    switch (f.periodo) {
+      case 'mes': return [`${a}-${mm(m)}-01`, `${a}-${mm(m)}-${ultimoDia(a, m)}`];
+      case 'mesPassado': { const am = m === 1 ? a - 1 : a, mp = m === 1 ? 12 : m - 1; return [`${am}-${mm(mp)}-01`, `${am}-${mm(mp)}-${ultimoDia(am, mp)}`]; }
+      case '30': return [st.somarDias(h, -29), h];
+      case '90': return [st.somarDias(h, -89), h];
+      case 'ano': return [`${a}-01-01`, `${a}-12-31`];
+      case 'prox7': return [h, st.somarDias(h, 7)];
+      case 'prox30': return [h, st.somarDias(h, 30)];
+      case 'pers': return [f.de || '', f.ate || ''];
+      default: return ['', ''];
+    }
+  }
+  const dataBase = (o, base) => base === 'inicio' ? (o.dataInicio || '') : base === 'validade' ? st.validadeAte(o) : (o.data || '');
+
+  function filtrarRel(f) {
+    const [de, ate] = intervalo(f);
+    const termo = f.busca.trim().toLowerCase();
+    return st.db.orcamentos.filter(o => {
+      if (f.status.length && !f.status.includes(st.statusExibido(o))) return false;
+      if (f.cliente && o.clienteId !== f.cliente) return false;
+      if (de || ate) {
+        const d = dataBase(o, f.base);
+        if (!d || (de && d < de) || (ate && d > ate)) return false;
+      }
+      if (termo) {
+        const c = st.cliente(o.clienteId);
+        if (![o.numero, o.titulo, c && c.nome].join(' ').toLowerCase().includes(termo)) return false;
+      }
+      return true;
+    }).sort((x, y) => String(dataBase(x, f.base) || '9999').localeCompare(String(dataBase(y, f.base) || '9999')) * (f.base === 'data' ? -1 : 1));
+  }
+
+  function aplicarVisao(v) {
+    const f = filtroRelPadrao();
+    if (v === 'avencer') Object.assign(f, { periodo: 'prox7', base: 'validade', status: ['Enviado'] });
+    else if (v === 'executar') Object.assign(f, { periodo: 'tudo', base: 'inicio', status: ['Aprovado'] });
+    else if (v === 'atrasados') Object.assign(f, { periodo: 'pers', base: 'inicio', status: ['Aprovado'], de: '', ate: st.somarDias(st.hoje(), -1) });
+    else if (v === 'vencidos') Object.assign(f, { periodo: 'tudo', base: 'validade', status: ['Vencido'] });
+    else return;
+    filtroRel = f;
+  }
+
+  function relatorios() {
+    marcarAba('relatorios');
+    const params = new URLSearchParams(location.hash.split('?')[1] || '');
+    if (params.get('visao')) { aplicarVisao(params.get('visao')); history.replaceState(null, '', '#/relatorios'); }
+    topo('Relatórios', { acoes: `<button class="icon-btn" id="csv" aria-label="Exportar planilha (CSV)" title="Exportar planilha (CSV)">${ICON.backup}</button>` });
+    const f = filtroRel;
+    const clientesOrd = [...st.db.clientes].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    app.innerHTML = `
+      <details class="card filtros" id="flt" open>
+        <summary>${ICON.filtro}<span>Filtros</span><span class="muted" id="flt-res"></span></summary>
+        <div class="campos" style="margin-top:12px">
+          <div class="campo c3 m3"><label for="r-per">Período</label><select id="r-per" data-r="periodo">${PERIODOS.map(([v, r]) => `<option value="${v}" ${v === f.periodo ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
+          <div class="campo c3 m3"><label for="r-base">Considerar a data de</label><select id="r-base" data-r="base">${BASES.map(([v, r]) => `<option value="${v}" ${v === f.base ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
+          <div class="campo c3 m3 r-pers"><label for="r-de">De</label><input id="r-de" type="date" data-r="de" value="${esc(f.de)}"></div>
+          <div class="campo c3 m3 r-pers"><label for="r-ate">Até</label><input id="r-ate" type="date" data-r="ate" value="${esc(f.ate)}"></div>
+          <div class="campo c3"><label for="r-cli">Cliente</label><select id="r-cli" data-r="cliente"><option value="">Todos os clientes</option>${clientesOrd.map(c => `<option value="${c.id}" ${c.id === f.cliente ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></div>
+          <div class="campo c3"><label for="r-q">Buscar</label><input id="r-q" type="search" data-r="busca" value="${esc(f.busca)}" placeholder="Número, título ou cliente"></div>
+          <div class="campo"><span class="label">Status</span>
+            <div class="chips multi" id="r-st"><button type="button" class="chip" data-s="">Todos</button>${STATUS_REL.map(s => `<button type="button" class="chip" data-s="${s}">${s}</button>`).join('')}</div></div>
+          <div class="campo"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <span class="ajuda" id="r-int"></span>
+            <button class="btn" type="button" id="r-limpar">Limpar filtros</button></div></div>
+        </div>
+      </details>
+      <div class="chips" id="r-atalhos">
+        <button class="chip" data-v="avencer">A vencer (7 dias)</button>
+        <button class="chip" data-v="vencidos">Vencidos</button>
+        <button class="chip" data-v="executar">A executar</button>
+        <button class="chip" data-v="atrasados">Início atrasado</button>
+      </div>
+      <div id="r-out"></div>`;
+
+    const out = app.querySelector('#r-out');
+    function desenhar() {
+      const [de, ate] = intervalo(f);
+      app.querySelectorAll('.r-pers').forEach(el => { el.hidden = f.periodo !== 'pers'; });
+      app.querySelectorAll('#r-st .chip').forEach(c => c.classList.toggle('ativo', c.dataset.s ? f.status.includes(c.dataset.s) : !f.status.length));
+      const nomeBase = BASES.find(b => b[0] === f.base)[1].toLowerCase();
+      app.querySelector('#r-int').textContent = (de || ate)
+        ? `Data de ${nomeBase}: ${de ? st.dataBR(de) : 'início'} a ${ate ? st.dataBR(ate) : 'hoje em diante'}`
+        : 'Sem limite de datas';
+      const l = filtrarRel(f);
+      app.querySelector('#flt-res').textContent = `${l.length} orçamento(s)`;
+
+      if (!l.length) { out.innerHTML = `<div class="lista"><div class="vazio">${ICON.filtro}<p>Nenhum orçamento com estes filtros.</p></div></div>`; return; }
+      const tot = o => st.totais(o).total;
+      const soma = x => x.reduce((s, o) => s + tot(o), 0);
+      const aprov = l.filter(o => o.status === 'Aprovado' || o.status === 'Concluído');
+      const recus = l.filter(o => o.status === 'Recusado');
+      const taxa = aprov.length + recus.length ? Math.round(aprov.length / (aprov.length + recus.length) * 100) + '%' : '-';
+      const total = soma(l);
+
+      // Por status
+      const porStatus = STATUS_REL.map(s => { const x = l.filter(o => st.statusExibido(o) === s); return { s, n: x.length, v: soma(x) }; }).filter(x => x.n);
+      const maxSt = Math.max(...porStatus.map(x => x.v), 1);
+      // Por tipo de item (valor bruto, antes do desconto)
+      const porTipo = st.TIPOS_ITEM.map(t => ({ t, v: l.reduce((s, o) => s + o.itens.filter(i => i.tipo === t).reduce((a, i) => a + st.num(i.qtd) * st.num(i.valor), 0), 0) })).filter(x => x.v > 0);
+      const maxTipo = Math.max(...porTipo.map(x => x.v), 1);
+      // Clientes
+      const mapaCli = new Map();
+      l.forEach(o => { const k = o.clienteId || ''; const r = mapaCli.get(k) || { n: 0, v: 0 }; r.n++; r.v += tot(o); mapaCli.set(k, r); });
+      const topCli = [...mapaCli.entries()].sort((a, b) => b[1].v - a[1].v).slice(0, 5);
+
+      const dataLinha = o => {
+        if (f.base === 'inicio') return o.dataInicio ? `Início ${st.dataBR(o.dataInicio)}` : 'Sem data de início';
+        if (f.base === 'validade') return `Validade ${st.dataBR(st.validadeAte(o))}`;
+        return st.dataBR(o.data);
+      };
+      const barra = (v, max) => `<div class="barra"><span style="width:${Math.max(2, Math.round(v / max * 100))}%"></span></div>`;
+
+      out.innerHTML = `
+        <div class="stats">
+          <div class="stat"><div class="rot">Orçamentos</div><div class="num">${l.length}</div></div>
+          <div class="stat"><div class="rot">Valor total</div><div class="num">${st.brl(total)}</div></div>
+          <div class="stat"><div class="rot">Aprovados e concluídos</div><div class="num">${st.brl(soma(aprov))}</div></div>
+          <div class="stat"><div class="rot">Taxa de aprovação</div><div class="num">${taxa}</div></div>
+          <div class="stat"><div class="rot">Ticket médio</div><div class="num">${st.brl(total / l.length)}</div></div>
+          <div class="stat"><div class="rot">Aguardando resposta</div><div class="num">${st.brl(soma(l.filter(o => st.statusExibido(o) === 'Enviado')))}</div></div>
+        </div>
+
+        <h2>Por status</h2>
+        <div class="card tabela-rel">${porStatus.map(x => `
+          <div class="tr-linha"><div class="tr-rot">${badgeStatus(x.s)} <span class="muted">${x.n}</span></div>
+            <div class="tr-val">${st.brl(x.v)}</div>${barra(x.v, maxSt)}</div>`).join('')}</div>
+
+        ${porTipo.length ? `<h2>Por tipo de item</h2>
+        <div class="card tabela-rel">${porTipo.map(x => `
+          <div class="tr-linha"><div class="tr-rot">${esc(x.t)}</div><div class="tr-val">${st.brl(x.v)}</div>${barra(x.v, maxTipo)}</div>`).join('')}
+          <p class="ajuda" style="margin:8px 0 0">Soma dos itens antes do desconto.</p></div>` : ''}
+
+        ${!f.cliente ? `<h2>Principais clientes</h2>
+        <div class="lista">${topCli.map(([id, r]) => { const c = st.cliente(id); return `
+          <${c ? `a href="#/cliente/${c.id}"` : 'div class="linha"'}><div class="principal"><div class="t1">${esc(c ? c.nome : 'Sem cliente')}</div><div class="t2">${r.n} orçamento(s)</div></div>
+          <div class="valor">${st.brl(r.v)}</div></${c ? 'a' : 'div'}>`; }).join('')}</div>` : ''}
+
+        <h2>Orçamentos (${l.length})</h2>
+        ${listaOrcamentos(l, dataLinha)}`;
+    }
+
+    const flt = app.querySelector('#flt');
+    if (window.innerWidth < 600 && (f.periodo !== 'mes' || f.status.length || f.cliente || f.busca || f.base !== 'data')) flt.open = true;
+    else if (window.innerWidth < 600) flt.open = false;
+    flt.addEventListener('input', ev => {
+      const k = ev.target.dataset.r; if (!k) return;
+      f[k] = ev.target.value;
+      if (k === 'periodo' && f.periodo === 'pers' && !f.de && !f.ate) { const [d, a] = intervalo({ periodo: 'mes' }); f.de = d; f.ate = a; app.querySelector('#r-de').value = d; app.querySelector('#r-ate').value = a; }
+      desenhar();
+    });
+    app.querySelector('#r-st').addEventListener('click', ev => {
+      const b = ev.target.closest('.chip'); if (!b) return;
+      const s = b.dataset.s;
+      if (!s) f.status = [];
+      else f.status = f.status.includes(s) ? f.status.filter(x => x !== s) : [...f.status, s];
+      desenhar();
+    });
+    app.querySelector('#r-atalhos').addEventListener('click', ev => {
+      const b = ev.target.closest('.chip'); if (!b) return;
+      aplicarVisao(b.dataset.v); relatorios();
+    });
+    app.querySelector('#r-limpar').onclick = () => { filtroRel = filtroRelPadrao(); relatorios(); };
+    document.getElementById('csv').onclick = () => exportarCSV(filtrarRel(f));
+    desenhar();
+  }
+
+  function exportarCSV(lista) {
+    if (!lista.length) { toast('Nenhum orçamento para exportar.'); return; }
+    const cel = v => { const t = String(v == null ? '' : v); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    const cab = ['Número', 'Cliente', 'Título', 'Emissão', 'Validade', 'Início previsto', 'Status', 'Subtotal', 'Desconto', 'Total'];
+    const linhas = lista.map(o => {
+      const c = st.cliente(o.clienteId), t = st.totais(o);
+      return [o.numero, c ? c.nome : '', o.titulo, st.dataBR(o.data), st.dataBR(st.validadeAte(o)), st.dataBR(o.dataInicio), st.statusExibido(o), st.dec(t.subtotal), st.dec(t.desconto), st.dec(t.total)];
+    });
+    const csv = '﻿' + [cab, ...linhas].map(l => l.map(cel).join(';')).join('\r\n');
+    window.WhatsApp.baixar(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `relatorio-orcamentos-${st.hoje()}.csv`);
+    toast(`Planilha com ${lista.length} orçamento(s) baixada.`);
   }
 
   /* ---------- Clientes ---------- */
@@ -795,7 +1060,7 @@
         <div class="campo"><label for="p-ga">Garantia</label><textarea id="p-ga" data-f="garantiaPadrao">${esc(e.garantiaPadrao)}</textarea></div>
         <div class="campo"><label for="p-ob">Observações</label><textarea id="p-ob" data-f="observacoesPadrao">${esc(e.observacoesPadrao)}</textarea></div>
         <div class="campo"><label for="p-msg">Mensagem do WhatsApp</label><textarea id="p-msg" data-f="mensagemPadrao" rows="4">${esc(e.mensagemPadrao)}</textarea>
-          <span class="ajuda">Use {cliente}, {numero}, {titulo}, {total}, {validade} e {empresa}.</span></div>
+          <span class="ajuda">Use {cliente}, {numero}, {titulo}, {total}, {validade}, {inicio} e {empresa}.</span></div>
       </div></div>
 
       <h2>Catálogo</h2>
@@ -815,7 +1080,7 @@
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.6.0</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.7.0</p>`;
 
     // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {
@@ -1301,7 +1566,7 @@
     // Dados que chegaram de outro aparelho: atualiza listas (não mexe em telas de edição)
     window.Nuvem.aoMudarDados(() => {
       const rota = (location.hash || '#/inicio').split('?')[0].split('/')[1] || 'inicio';
-      if (['inicio', 'orcamentos', 'clientes', 'catalogo'].includes(rota)) {
+      if (['inicio', 'orcamentos', 'clientes', 'catalogo', 'relatorios'].includes(rota)) {
         const y = window.scrollY; render(); window.scrollTo(0, y);
       }
     });

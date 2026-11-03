@@ -21,6 +21,7 @@
       .replace(/\{titulo\}/g, o.titulo || '')
       .replace(/\{total\}/g, st.brl(st.totais(o).total))
       .replace(/\{validade\}/g, st.dataBR(st.validadeAte(o)))
+      .replace(/\{inicio\}/g, o.dataInicio ? st.dataBR(o.dataInicio) : 'a combinar')
       .replace(/\{empresa\}/g, e.nome || '')
       .trim();
   }

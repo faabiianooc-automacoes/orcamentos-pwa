@@ -7,7 +7,7 @@
   const CHAVE = 'orcamentos-pwa:v1';
   const VERSAO_DADOS = 1;
 
-  const STATUS = ['Rascunho', 'Enviado', 'Aprovado', 'Recusado'];
+  const STATUS = ['Rascunho', 'Enviado', 'Aprovado', 'Concluído', 'Recusado'];
   const TIPOS_ITEM = ['Material', 'Serviço', 'Mão de obra'];
   const UNIDADES = ['un', 'ponto', 'circuito', 'h', 'm', 'm²', 'kit', 'mês', 'vb'];
   const CP = window.CatalogoPadrao;
@@ -318,6 +318,7 @@
       clienteId: clienteId || '',
       titulo: '',
       data: hoje(),
+      dataInicio: '', // data prevista de início da execução
       validadeDias: Number(e.validadeDias) || 15,
       status: 'Rascunho',
       itens: [],
@@ -349,7 +350,7 @@
     const copia = JSON.parse(JSON.stringify(o));
     Object.assign(n, copia, {
       id: n.id, numero: n.numero, data: hoje(), status: 'Rascunho',
-      criadoEm: n.criadoEm, enviadoEm: '',
+      criadoEm: n.criadoEm, enviadoEm: '', concluidoEm: '', dataInicio: '',
       titulo: o.titulo ? o.titulo + ' (cópia)' : ''
     });
     n.itens = n.itens.map(i => ({ ...i, id: uid() }));
@@ -372,6 +373,32 @@
   }
 
   const validadeAte = o => somarDias(o.data, o.validadeDias);
+  // Dias de a até b (datas AAAA-MM-DD). Negativo se b é antes de a.
+  const diasEntre = (a, b) => Math.round((Date.parse(String(b).slice(0, 10) + 'T12:00:00Z') - Date.parse(String(a).slice(0, 10) + 'T12:00:00Z')) / 864e5);
+
+  /* Painel do Início: orçamentos a vencer e a executar.
+     A vencer: enviados (aguardando resposta) com validade de hoje até +dias.
+     A executar: aprovados ainda não concluídos, pela data prevista de início. */
+  function agenda(dias = 7) {
+    const h = hoje(), lim = somarDias(h, dias);
+    const r = { aVencer: [], vencidos: [], atrasados: [], proximos: [], depois: [], semData: [], dias };
+    db.orcamentos.forEach(o => {
+      if (o.status === 'Enviado') {
+        const v = validadeAte(o);
+        if (v < h) r.vencidos.push(o); else if (v <= lim) r.aVencer.push(o);
+      } else if (o.status === 'Aprovado') {
+        if (!o.dataInicio) r.semData.push(o);
+        else if (o.dataInicio < h) r.atrasados.push(o);
+        else if (o.dataInicio <= lim) r.proximos.push(o);
+        else r.depois.push(o);
+      }
+    });
+    const porData = f => (a, b) => String(f(a)).localeCompare(String(f(b)));
+    r.aVencer.sort(porData(validadeAte));
+    [r.atrasados, r.proximos, r.depois].forEach(l => l.sort(porData(o => o.dataInicio)));
+    r.aExecutar = [...r.atrasados, ...r.proximos, ...r.depois, ...r.semData];
+    return r;
+  }
   function statusExibido(o) {
     if (o.status === 'Enviado' && validadeAte(o) < hoje()) return 'Vencido';
     return o.status;
@@ -385,6 +412,7 @@
     if (!db.empresa.nome) lista.push({ msg: 'Nome da sua empresa (Ajustes)', bloqueia: false, ir: '#/ajustes' });
     if (!c) lista.push({ msg: 'Escolha o cliente do orçamento', bloqueia: true });
     else if (paraWhatsApp && !telefoneValido(c.telefone)) lista.push({ msg: `Telefone de WhatsApp de ${c.nome} com DDD`, bloqueia: true, ir: '#/cliente/' + c.id });
+    if (!o.dataInicio) lista.push({ msg: 'Data prevista de início', bloqueia: true });
     if (!o.itens.length) lista.push({ msg: 'Adicione pelo menos um item', bloqueia: true });
     const semDesc = o.itens.filter(i => !String(i.descricao || '').trim()).length;
     if (semDesc) lista.push({ msg: `${semDesc} item(ns) sem descrição`, bloqueia: true });
@@ -444,7 +472,7 @@
     soDigitos, telefoneInternacional, telefoneFmt, telefoneValido,
     salvar, cliente, salvarCliente, excluirCliente, adicionarClientes,
     orcamento, novoOrcamento, salvarOrcamento, duplicarOrcamento, excluirOrcamento, orcamentoVazio,
-    totais, validadeAte, statusExibido, pendencias,
+    totais, validadeAte, diasEntre, agenda, statusExibido, pendencias,
     salvarItemCatalogo, excluirItemCatalogo, salvarEmpresa,
     exportar, importar, marcarBackup, ultimoBackup, temDados, resetar,
     // nuvem
