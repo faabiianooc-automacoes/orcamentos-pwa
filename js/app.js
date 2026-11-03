@@ -1,6 +1,6 @@
 /* Telas e navegação do app. Rotas por hash:
    #/inicio · #/orcamentos · #/orcamento/:id · #/clientes · #/cliente/:id|novo
-   #/ajustes · #/catalogo · #/dimensionamento · #/relatorios?visao=avencer|executar|atrasados */
+   #/ajustes · #/catalogo · #/dimensionamento · #/formulas · #/relatorios?visao=avencer|executar|atrasados */
 (function () {
   'use strict';
   const st = window.Store;
@@ -106,7 +106,7 @@
     const novo = app.cloneNode(false);
     app.replaceWith(novo);
     app = novo;
-    const telas = { inicio, orcamentos, orcamento: editorOrcamento, clientes, cliente: formCliente, ajustes, catalogo, relatorios, dimensionamento };
+    const telas = { inicio, orcamentos, orcamento: editorOrcamento, clientes, cliente: formCliente, ajustes, catalogo, relatorios, dimensionamento, formulas };
     (telas[rota] || inicio)(id);
     window.scrollTo(0, 0);
   }
@@ -312,6 +312,13 @@
         <button class="btn" id="add-item" type="button">${ICON.mais} Item avulso</button>
       </div>
 
+      <h2>Dimensionamento</h2>
+      <div id="circ"></div>
+      <div class="acoes">
+        <button class="btn" id="add-circ" type="button">${ICON.cabo} Adicionar circuito</button>
+      </div>
+      <label class="check" id="dim-pdf-l" style="margin-top:8px"><input type="checkbox" id="dim-pdf" ${o.dimNoPdf !== false ? 'checked' : ''}> Incluir o dimensionamento no PDF do orçamento</label>
+
       <h2>Valores</h2>
       <div class="card">
         <div class="campos">
@@ -359,6 +366,34 @@
           <div class="item-total" data-tot>${st.brl(st.num(it.qtd) * st.num(it.valor))}</div>
         </div>`).join('');
     }
+
+    function desenharCircuitos() {
+      const L = o.circuitos || [];
+      app.querySelector('#dim-pdf-l').hidden = !L.length;
+      app.querySelector('#circ').innerHTML = L.length ? `<div class="lista">${L.map((c, i) => {
+        const calc = (c.linhas || []).filter(l => l.tipo === 'calculo' && !l.erro);
+        const res = [...calc.filter(l => l.destaque), ...calc.filter(l => l.resumo && !l.destaque)].slice(0, 3).map(l => `${l.rotulo}: ${l.valor}${l.unidade ? ' ' + l.unidade : ''}`).join(' · ');
+        return `<button class="linha" type="button" data-circ="${i}"><span class="ag-ic ${c.erros ? 'perigo' : c.modelo && c.modelo.exemplo ? 'alerta' : 'ok'}">${ICON.cabo}</span>
+          <div class="principal"><div class="t1">${esc(c.nome)}</div><div class="t2">${esc(res || (c.erros ? 'Cálculo com erro' : ''))}</div></div>
+          ${c.erros ? '<span class="badge b-recusado">erro</span>' : c.modelo && c.modelo.exemplo ? '<span class="badge b-vencido">exemplo</span>' : ''}</button>`;
+      }).join('')}</div>` : `<p class="ajuda" style="margin:0">Opcional: calcule os cabos e disjuntores dos circuitos (NBR 5410) e envie junto com o orçamento ou em arquivo separado para o "de acordo" do cliente.</p>`;
+    }
+    app.querySelector('#circ').addEventListener('click', async ev => {
+      const b = ev.target.closest('[data-circ]'); if (!b) return;
+      const i = Number(b.dataset.circ);
+      const r = await dialogoCircuito(o.circuitos[i], i + 1);
+      if (!r) return;
+      if (r === 'excluir') { if (!(await confirmar('Excluir circuito', `Excluir "${esc(o.circuitos[i].nome)}"?`, 'Excluir'))) return; o.circuitos.splice(i, 1); }
+      else o.circuitos[i] = r;
+      desenharCircuitos(); agendarSalvar();
+    });
+    app.querySelector('#add-circ').onclick = async () => {
+      o.circuitos = o.circuitos || [];
+      const r = await dialogoCircuito(null, o.circuitos.length + 1);
+      if (!r || r === 'excluir') return;
+      o.circuitos.push(r); desenharCircuitos(); agendarSalvar();
+    };
+    app.querySelector('#dim-pdf').addEventListener('change', ev => { o.dimNoPdf = ev.target.checked; agendarSalvar(); });
 
     function atualizarTotais() {
       const t = st.totais(o);
@@ -498,13 +533,14 @@
     };
 
     // Envia um PDF (gerado ou assinado no gov.br) e, depois, a mensagem
-    async function enviarParaCliente(blob, nomeArq) {
+    async function enviarParaCliente(blob, nomeArq, memorial) {
       const c = st.cliente(o.clienteId);
-      const msg = window.WhatsApp.mensagem(o);
+      const msg = memorial ? window.WhatsApp.mensagemMemorial(o) : window.WhatsApp.mensagem(o);
       const copiada = await window.WhatsApp.copiar(msg); // antes do compartilhar, ainda no toque do usuário
-      const r = await window.WhatsApp.enviarPDF(o, blob, nomeArq);
+      const r = await window.WhatsApp.enviarPDF(o, blob, nomeArq, msg, memorial ? `Dimensionamento ${o.numero}` : '');
       if (r === 'cancelado') return;
-      if (o.status === 'Rascunho') { o.status = 'Enviado'; o.enviadoEm = new Date().toISOString(); st.salvarOrcamento(o); const sel = app.querySelector('#f-st'); if (sel) sel.value = 'Enviado'; }
+      if (memorial) { o.memorialEnviadoEm = new Date().toISOString(); st.salvarOrcamento(o); }
+      else if (o.status === 'Rascunho') { o.status = 'Enviado'; o.enviadoEm = new Date().toISOString(); st.salvarOrcamento(o); const sel = app.querySelector('#f-st'); if (sel) sel.value = 'Enviado'; }
       if (r === 'compartilhado') {
         const enviar = await dialogo({
           titulo: 'Agora envie a mensagem',
@@ -575,6 +611,8 @@
           ${c && st.telefoneValido(c.telefone) ? `<button class="linha" data-op="msg">${ICON.conversa}<div class="principal"><div class="t1">Mensagem para ${esc(c.nome)}</div><div class="t2">Abre a conversa no WhatsApp só com o texto</div></div></button>` : ''}
           <button class="linha" data-op="govbr">${ICON.enviar}<div class="principal"><div class="t1">Assinar com gov.br e enviar</div><div class="t2">Assinatura digital gratuita, com validade jurídica</div></div></button>
           <button class="linha" data-op="baixar">${ICON.pdf}<div class="principal"><div class="t1">Baixar PDF</div></div></button>
+          ${(o.circuitos || []).length ? `<button class="linha" data-op="mem-env">${ICON.cabo}<div class="principal"><div class="t1">Enviar dimensionamento para "de acordo"</div><div class="t2">PDF separado só com os circuitos e o campo de aceite</div></div></button>
+          <button class="linha" data-op="mem-baixar">${ICON.pdf}<div class="principal"><div class="t1">Baixar PDF do dimensionamento</div></div></button>` : ''}
           <button class="linha" data-op="dup">${ICON.copiar}<div class="principal"><div class="t1">Duplicar orçamento</div></div></button>
           <button class="linha" data-op="exc" style="color:var(--danger)">${ICON.lixo}<div class="principal"><div class="t1">Excluir orçamento</div></div></button>
         </div>`,
@@ -584,6 +622,21 @@
       if (r === 'msg') window.WhatsApp.abrirConversa(c.telefone, window.WhatsApp.mensagem(o));
       if (r === 'govbr') assinarGovbr();
       if (r === 'baixar') { if (await checarAntes(false)) window.WhatsApp.baixar(window.PDF.gerar(o), window.PDF.nomeArquivo(o)); }
+      if (r === 'mem-env' || r === 'mem-baixar') {
+        const cli = st.cliente(o.clienteId);
+        if (!cli) { toast('Escolha o cliente do orçamento.'); return; }
+        if (r === 'mem-env' && !st.telefoneValido(cli.telefone)) { toast('Informe o WhatsApp do cliente com DDD.'); return; }
+        const ex = o.circuitos.some(x => x.modelo && x.modelo.exemplo), er = o.circuitos.some(x => x.erros);
+        if ((ex || er) && !(await dialogo({
+          titulo: 'Confira antes de enviar',
+          corpo: `<ul style="margin:0;padding-left:18px">${ex ? '<li>Calculado com <b>fórmulas de exemplo</b> (fictícias). O PDF sai marcado como exemplo.</li>' : ''}${er ? '<li>Há circuito com <b>erro</b> de cálculo.</li>' : ''}</ul>`,
+          acoes: [{ rotulo: 'Corrigir', valor: false }, { rotulo: 'Gerar mesmo assim', classe: 'prim', valor: true }]
+        }))) return;
+        st.salvarOrcamento(o);
+        const blob = window.PDF.gerarMemorial(o), nome = window.PDF.nomeMemorial(o);
+        if (r === 'mem-baixar') window.WhatsApp.baixar(blob, nome);
+        else await enviarParaCliente(blob, nome, true);
+      }
       if (r === 'dup') { const n = st.duplicarOrcamento(o); toast('Cópia criada: ' + n.numero); location.hash = '#/orcamento/' + n.id; }
       if (r === 'exc' && await confirmar('Excluir orçamento', `Excluir ${esc(o.numero)}? Não dá para desfazer.`, 'Excluir')) {
         st.excluirOrcamento(o.id); toast('Orçamento excluído.'); location.hash = '#/orcamentos';
@@ -598,34 +651,303 @@
       if (st.orcamentoVazio(o)) st.excluirOrcamento(o.id); else if (sujo) st.salvarOrcamento(o);
     };
 
-    desenharItens(); atualizarTotais(); atualizarPendencias();
+    desenharItens(); desenharCircuitos(); atualizarTotais(); atualizarPendencias();
   }
 
   /* ---------- Dimensionamento (NBR 5410) ----------
-     Tela reservada. Os cálculos virão da planilha .xlsx do usuário
-     (js/dimensionamento.js), reproduzindo as mesmas fórmulas e tabelas. */
+     Fórmulas editáveis em #/formulas (js/formulas.js). Os circuitos calculados
+     ficam no orçamento e vão no PDF dele ou num memorial separado (de acordo). */
+  const F = window.Formulas;
+
+  function campoEntrada(en, val) {
+    const v = val == null ? en.padrao : val;
+    const rot = `${esc(en.rotulo || en.var)}${en.unidade ? ` <span class="muted">(${esc(en.unidade)})</span>` : ''}`;
+    if (en.tipo === 'lista') {
+      return `<div class="campo c3 m3"><label>${rot}</label><select data-e="${esc(en.var)}">${F.opcoes(en).map(op => `<option ${String(op) === String(v) ? 'selected' : ''}>${esc(op)}</option>`).join('')}</select></div>`;
+    }
+    const txt = typeof v === 'number' ? String(v).replace('.', ',') : String(v == null ? '' : v);
+    return `<div class="campo c3 m3"><label>${rot}</label><input class="num" inputmode="decimal" data-e="${esc(en.var)}" value="${esc(txt)}"></div>`;
+  }
+
+  function htmlResultados(linhas) {
+    const L = linhas.filter(l => l.tipo === 'calculo');
+    if (!L.length) return `<div class="lista"><div class="vazio"><p>Nenhum cálculo no modelo.</p></div></div>`;
+    return `<div class="lista">${L.map(l => `
+      <div class="linha dim-l ${l.destaque ? 'dest' : ''} ${l.erro ? 'err' : ''}"><div class="principal">
+        <div class="t1">${esc(l.rotulo)}</div>${l.erro ? `<div class="t2 dim-msg">${esc(l.valor.replace(/^Erro: /, ''))}</div>` : ''}</div>
+        <div class="valor">${l.erro ? 'Erro' : `${esc(l.valor)}${l.unidade ? ' ' + esc(l.unidade) : ''}`}</div></div>`).join('')}</div>`;
+  }
+
+  // Formulário de cálculo (entradas + resultados ao vivo). entradas é alterado no lugar.
+  function formCalculo(raiz, modelo, entradas) {
+    (modelo.entradas || []).forEach(en => { if (entradas[en.var] == null) entradas[en.var] = en.padrao; });
+    raiz.innerHTML = `
+      <div class="card"><div class="campos">${(modelo.entradas || []).map(en => campoEntrada(en, entradas[en.var])).join('')}</div></div>
+      <h2>Resultados</h2><div class="dim-res"></div>`;
+    const desenhar = () => { raiz.querySelector('.dim-res').innerHTML = htmlResultados(F.linhas(modelo, entradas).linhas); };
+    raiz.addEventListener('input', ev => { const k = ev.target.dataset.e; if (!k) return; entradas[k] = ev.target.value; desenhar(); });
+    desenhar();
+  }
+
+  const avisoExemplo = m => m.exemplo ? `<div class="aviso">${ICON.alerta}<div><p><b>Fórmulas de exemplo, com valores fictícios</b></p>
+    <p class="ajuda" style="margin:2px 0 0">Servem para conhecer a ferramenta. Antes de usar com clientes, troque pelas fórmulas e tabelas da sua planilha em <a href="#/formulas">Editar fórmulas</a>. O PDF sai marcado como exemplo.</p></div></div>` : '';
+
+  let calcAtual = { nome: '', entradas: {} };
   function dimensionamento() {
     marcarAba('inicio');
-    topo('Dimensionamento', { voltar: '#/inicio' });
-    const D = window.Dimensionamento;
-    if (D && D.pronto) { D.tela(app, { st, esc, toast, ICON }); return; }
+    topo('Dimensionamento', { voltar: '#/inicio', acoes: `<a class="btn topo-btn" href="#/formulas">Fórmulas</a>` });
+    const m = st.modeloDim();
     app.innerHTML = `
-      <div class="aviso info">${ICON.info}<div><p><b>Em preparação</b></p>
-        <p class="ajuda" style="margin:2px 0 0">Os cálculos serão feitos com as fórmulas e tabelas da sua planilha de dimensionamento, seguindo a NBR 5410.</p></div></div>
-      <h2>O que esta tela vai calcular</h2>
-      <div class="lista">
-        ${[
-          ['Corrente de projeto', 'A partir da potência, tensão, fator de potência e tipo de circuito'],
-          ['Seção pela capacidade de condução', 'Método de instalação, temperatura e agrupamento'],
-          ['Seção pela queda de tensão', 'Comprimento do circuito e limite admissível'],
-          ['Seção mínima', 'Iluminação, tomadas e força'],
-          ['Proteção', 'Disjuntor compatível com o cabo escolhido']
-        ].map(([t, d]) => `<div class="linha"><span class="ag-ic ok">${ICON.cabo}</span><div class="principal"><div class="t1">${t}</div><div class="t2" style="white-space:normal">${d}</div></div></div>`).join('')}
+      ${avisoExemplo(m)}
+      <div class="card"><div class="campos"><div class="campo"><label for="d-nome">Nome do circuito</label>
+        <input id="d-nome" value="${esc(calcAtual.nome)}" placeholder="Ex.: Chuveiro do banheiro social"></div></div></div>
+      <h2>Dados de entrada</h2>
+      <div id="d-calc"></div>
+      <div class="acoes">
+        <button class="btn prim" id="d-salvar">${ICON.mais} Salvar em um orçamento</button>
+        <button class="btn" id="d-limpar">Limpar</button>
       </div>
-      <p class="ajuda" style="margin-top:12px">A lista acima é provisória: os campos e critérios finais serão os da planilha.</p>`;
+      <p class="ajuda">${esc(m.nome)} · versão ${esc(m.versao || 1)}</p>`;
+    formCalculo(app.querySelector('#d-calc'), m, calcAtual.entradas);
+    app.querySelector('#d-nome').addEventListener('input', ev => { calcAtual.nome = ev.target.value; });
+    app.querySelector('#d-limpar').onclick = () => { calcAtual = { nome: '', entradas: {} }; dimensionamento(); };
+    app.querySelector('#d-salvar').onclick = async () => {
+      const lista = st.db.orcamentos.filter(o => o.status !== 'Recusado' && o.status !== 'Concluído');
+      const destino = await dialogo({
+        titulo: 'Salvar em qual orçamento?',
+        corpo: `<div class="busca">${ICON.busca}<input type="search" id="do-q" placeholder="Buscar orçamento ou cliente"></div>
+          <div class="lista" id="do-l">
+            <button class="linha" data-o="novo">${ICON.mais}<div class="principal"><div class="t1">Novo orçamento</div></div></button>
+            ${lista.map(o => { const c = st.cliente(o.clienteId); return `<button class="linha" data-o="${o.id}"><div class="principal"><div class="t1">${esc(c ? c.nome : 'Sem cliente')}</div><div class="t2">${esc(o.numero)}${o.titulo ? ' · ' + esc(o.titulo) : ''} · ${(o.circuitos || []).length} circuito(s)</div></div>${badge(o)}</button>`; }).join('')}
+          </div>`,
+        acoes: [],
+        aoAbrir: (d, fechar) => {
+          d.querySelector('#do-l').addEventListener('click', e => { const b = e.target.closest('[data-o]'); if (b) fechar(b.dataset.o); });
+          d.querySelector('#do-q').addEventListener('input', e => { const t = e.target.value.toLowerCase(); d.querySelectorAll('#do-l [data-o]').forEach(b => { b.hidden = b.dataset.o !== 'novo' && !!t && !b.textContent.toLowerCase().includes(t); }); });
+        }
+      });
+      if (!destino) return;
+      const o = destino === 'novo' ? st.novoOrcamento('') : st.orcamento(destino);
+      if (!o) return;
+      o.circuitos = o.circuitos || [];
+      o.circuitos.push(st.calcularCircuito(calcAtual.nome || `Circuito ${o.circuitos.length + 1}`, calcAtual.entradas));
+      st.salvarOrcamento(o);
+      calcAtual = { nome: '', entradas: {} };
+      toast(`Circuito salvo em ${o.numero}.`);
+      location.hash = '#/orcamento/' + o.id;
+    };
+  }
+
+  /* Diálogo de circuito dentro do orçamento (novo ou edição). Retorna o circuito, 'excluir' ou null. */
+  async function dialogoCircuito(circ, n) {
+    const m = st.modeloDim();
+    const entradas = { ...(circ ? circ.entradas : {}) };
+    let nome = circ ? circ.nome : `Circuito ${n}`;
+    const mudouModelo = circ && circ.modelo && (circ.modelo.versao !== m.versao || circ.modelo.nome !== m.nome);
+    const r = await dialogo({
+      titulo: circ ? 'Editar circuito' : 'Novo circuito',
+      corpo: `${m.exemplo ? '<p class="ajuda" style="margin-top:0;color:var(--warn)"><b>Fórmulas de exemplo (fictícias).</b></p>' : ''}
+        ${mudouModelo ? `<p class="ajuda" style="margin-top:0">Calculado com a versão ${esc(circ.modelo.versao)}. Ao salvar, será recalculado com as fórmulas atuais (versão ${esc(m.versao)}).</p>` : ''}
+        <div class="campo" style="margin-bottom:12px"><label for="dc-nome">Nome do circuito</label><input id="dc-nome" value="${esc(nome)}"></div>
+        <div id="dc-calc"></div>`,
+      acoes: [...(circ ? [{ rotulo: 'Excluir', classe: 'perigo', valor: 'excluir' }] : []), { rotulo: 'Cancelar', valor: null }, { rotulo: 'Salvar', classe: 'prim', valor: 'ok' }],
+      aoAbrir: d => {
+        d.classList.add('largo');
+        formCalculo(d.querySelector('#dc-calc'), m, entradas);
+        d.querySelector('#dc-nome').addEventListener('input', e => { nome = e.target.value; });
+      }
+    });
+    if (r === 'excluir') return 'excluir';
+    if (r !== 'ok') return null;
+    return st.calcularCircuito(nome, entradas, circ && circ.id);
+  }
+
+  /* ---------- Editor de fórmulas ---------- */
+  let rascModelo = null; // alterações não salvas (sobrevivem ao sair da tela)
+  function formulas() {
+    marcarAba('inicio');
+    topo('Fórmulas', { voltar: '#/dimensionamento', acoes: `<button class="icon-btn" id="fm-mais" aria-label="Mais opções">${ICON.lista}</button>` });
+    document.body.classList.add('com-barra');
+    if (!rascModelo) rascModelo = { m: JSON.parse(JSON.stringify(st.modeloDim())), sujo: false };
+    const R = rascModelo;
+    const m = R.m;
+    m.entradas = m.entradas || []; m.calculos = m.calculos || []; m.tabelas = m.tabelas || [];
+    const sid = () => st.uid();
+    const botoesOrdem = (sec, i, n) => `<span class="row" style="gap:2px">
+      <button class="icon-btn" data-op="sobe" data-sec="${sec}" data-i="${i}" aria-label="Mover para cima" ${i === 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+      <button class="icon-btn" data-op="desce" data-sec="${sec}" data-i="${i}" aria-label="Mover para baixo" ${i === n - 1 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+      <button class="icon-btn" data-op="rem" data-sec="${sec}" data-i="${i}" aria-label="Remover">${ICON.lixo}</button></span>`;
+    const ck = (sec, i, k, v, rot) => `<label class="check"><input type="checkbox" data-sec="${sec}" data-i="${i}" data-k="${k}" ${v ? 'checked' : ''}> ${rot}</label>`;
+
+    const htmlEntradas = () => m.entradas.map((en, i) => `
+      <div class="item">
+        <div class="item-topo"><span class="n">ENTRADA ${i + 1} · <code>${esc(en.var)}</code></span>${botoesOrdem('entradas', i, m.entradas.length)}</div>
+        <div class="campos">
+          <div class="campo c4"><label>Nome exibido</label><input data-sec="entradas" data-i="${i}" data-k="rotulo" value="${esc(en.rotulo)}"></div>
+          <div class="campo c2 m3"><label>Variável</label><input class="mono" data-sec="entradas" data-i="${i}" data-k="var" value="${esc(en.var)}" autocapitalize="off" spellcheck="false"></div>
+          <div class="campo c2 m3"><label>Unidade</label><input data-sec="entradas" data-i="${i}" data-k="unidade" value="${esc(en.unidade)}"></div>
+          <div class="campo c2 m3"><label>Tipo</label><select data-sec="entradas" data-i="${i}" data-k="tipo"><option value="numero" ${en.tipo !== 'lista' ? 'selected' : ''}>Número</option><option value="lista" ${en.tipo === 'lista' ? 'selected' : ''}>Lista</option></select></div>
+          <div class="campo c2 m3"><label>Valor padrão</label><input data-sec="entradas" data-i="${i}" data-k="padrao" value="${esc(String(en.padrao == null ? '' : en.padrao).replace('.', ','))}"></div>
+          <div class="campo ${en.tipo === 'lista' ? '' : 'oculto'}"><label>Opções (separe com ;)</label><input data-sec="entradas" data-i="${i}" data-k="opcoes" value="${esc(en.opcoes)}" placeholder="127;220;380"></div>
+          <div class="campo">${ck('entradas', i, 'resumo', en.resumo, 'Mostrar no resumo do PDF')}</div>
+        </div></div>`).join('') || '<p class="ajuda">Nenhuma entrada.</p>';
+
+    const htmlCalculos = () => m.calculos.map((c, i) => `
+      <div class="item">
+        <div class="item-topo"><span class="n">CÁLCULO ${i + 1} · <code>${esc(c.var)}</code></span>${botoesOrdem('calculos', i, m.calculos.length)}</div>
+        <div class="campos">
+          <div class="campo c4"><label>Nome exibido</label><input data-sec="calculos" data-i="${i}" data-k="rotulo" value="${esc(c.rotulo)}"></div>
+          <div class="campo c2 m3"><label>Variável</label><input class="mono" data-sec="calculos" data-i="${i}" data-k="var" value="${esc(c.var)}" autocapitalize="off" spellcheck="false"></div>
+          <div class="campo c2 m3"><label>Unidade</label><input data-sec="calculos" data-i="${i}" data-k="unidade" value="${esc(c.unidade)}"></div>
+          <div class="campo c2 m3"><label>Casas decimais</label><input type="number" min="0" max="6" inputmode="numeric" data-sec="calculos" data-i="${i}" data-k="casas" value="${esc(c.casas == null ? 2 : c.casas)}"></div>
+          <div class="campo"><label>Fórmula</label><textarea class="mono" rows="2" data-sec="calculos" data-i="${i}" data-k="formula" autocapitalize="off" spellcheck="false">${esc(c.formula)}</textarea>
+            <span class="ajuda fm-prev" data-prev="${i}"></span></div>
+          <div class="campo">${ck('calculos', i, 'resumo', c.resumo, 'Resumo do PDF')} ${ck('calculos', i, 'destaque', c.destaque, 'Destacar')} ${ck('calculos', i, 'oculto', c.oculto, 'Não mostrar (cálculo auxiliar)')}</div>
+        </div></div>`).join('') || '<p class="ajuda">Nenhum cálculo.</p>';
+
+    const htmlTabelas = () => m.tabelas.map((t, i) => `
+      <div class="item">
+        <div class="item-topo"><span class="n">TABELA ${i + 1}</span>${botoesOrdem('tabelas', i, m.tabelas.length)}</div>
+        <div class="campos">
+          <div class="campo"><label>Nome da tabela</label><input class="mono" data-sec="tabelas" data-i="${i}" data-k="nome" value="${esc(t.nome)}" autocapitalize="off" spellcheck="false"></div>
+          <div class="campo"><label>Dados (1ª linha = nomes das colunas; separe com ;)</label>
+            <textarea class="mono" rows="${Math.min(12, (t.linhas || []).length + 2)}" data-sec="tabelas" data-i="${i}" data-k="dados" autocapitalize="off" spellcheck="false">${esc(F.tabelaParaTexto(t))}</textarea>
+            <span class="ajuda" data-tinfo="${i}">${(t.linhas || []).length} linha(s) · colunas: ${esc((t.colunas || []).join(', '))}</span></div>
+        </div></div>`).join('') || '<p class="ajuda">Nenhuma tabela.</p>';
+
+    app.innerHTML = `
+      <div id="fm-sujo"></div>
+      <div class="card"><div class="campos">
+        <div class="campo"><label for="fm-nome">Nome do modelo</label><input id="fm-nome" data-g="nome" value="${esc(m.nome)}"></div>
+        <div class="campo"><label for="fm-crit">Critérios (aparece no PDF)</label><textarea id="fm-crit" data-g="criterios" rows="3">${esc(m.criterios)}</textarea></div>
+        <div class="campo"><label class="check"><input type="checkbox" data-g="exemplo" ${m.exemplo ? 'checked' : ''}> Modelo de exemplo (marca o PDF como fictício)</label>
+          <span class="ajuda">Versão atual: ${esc(m.versao || 1)}. Cada vez que salvar, a versão aumenta; circuitos já calculados guardam a versão usada.</span></div>
+      </div></div>
+      <details class="card" style="margin-top:12px"><summary><b>Como escrever as fórmulas</b></summary>
+        <p class="ajuda">Igual ao Excel em português: argumentos separados por <b>;</b> e decimais com vírgula. Use os nomes das variáveis (entradas e cálculos anteriores). Os cálculos são feitos na ordem da lista.</p>
+        <div class="lista">${F.AJUDA.map(([f, ex]) => `<div class="linha"><div class="principal"><div class="t1 mono" style="white-space:normal">${esc(f)}</div><div class="t2" style="white-space:normal">${esc(ex)}</div></div></div>`).join('')}</div>
+      </details>
+      <h2>Entradas</h2><div id="fm-entradas"></div>
+      <div class="acoes"><button class="btn" data-add="entradas">${ICON.mais} Entrada</button></div>
+      <h2>Cálculos</h2><p class="ajuda" style="margin-top:-4px">Abaixo de cada fórmula aparece o resultado com os valores padrão das entradas.</p><div id="fm-calculos"></div>
+      <div class="acoes"><button class="btn" data-add="calculos">${ICON.mais} Cálculo</button></div>
+      <h2>Tabelas</h2><div id="fm-tabelas"></div>
+      <div class="acoes"><button class="btn" data-add="tabelas">${ICON.mais} Tabela</button></div>
+      <div class="barra-total"><div class="in">
+        <div class="tot"><div class="r">Modelo</div><div class="v" id="fm-st" style="font-size:14px"></div></div>
+        <button class="btn" id="fm-desc">Descartar</button>
+        <button class="btn prim" id="fm-salvar">Salvar</button>
+      </div></div>`;
+
+    const secs = { entradas: htmlEntradas, calculos: htmlCalculos, tabelas: htmlTabelas };
+    const desenharSec = sec => { app.querySelector('#fm-' + sec).innerHTML = secs[sec](); };
+    function estado() {
+      app.querySelector('#fm-st').textContent = R.sujo ? 'Alterações não salvas' : 'Salvo';
+      app.querySelector('#fm-desc').disabled = !R.sujo;
+      app.querySelector('#fm-sujo').innerHTML = R.sujo ? `<div class="aviso info">${ICON.info}<div><p>As alterações só valem para novos cálculos depois de <b>Salvar</b>.</p></div></div>` : '';
+    }
+    function previas() {
+      const r = F.calcular(m, {});
+      m.calculos.forEach((c, i) => {
+        const el = app.querySelector(`[data-prev="${i}"]`); if (!el) return;
+        const v = r.valores[F.chave(c.var)];
+        el.classList.toggle('erro-txt', v instanceof Error);
+        el.textContent = v instanceof Error ? 'Erro: ' + v.message : `= ${F.fmt(v, c.casas)}${c.unidade ? ' ' + c.unidade : ''}`;
+      });
+    }
+    const sujar = () => { R.sujo = true; estado(); };
+    Object.keys(secs).forEach(desenharSec); previas(); estado();
+
+    app.addEventListener('input', ev => {
+      const el = ev.target;
+      if (el.dataset.g) { m[el.dataset.g] = el.type === 'checkbox' ? el.checked : el.value; sujar(); return; }
+      const sec = el.dataset.sec; if (!sec || el.dataset.op) return;
+      const i = Number(el.dataset.i), k = el.dataset.k, x = m[sec][i];
+      if (el.type === 'checkbox') x[k] = el.checked;
+      else if (sec === 'tabelas' && k === 'dados') { const t = F.textoParaTabela(x.nome, el.value); x.colunas = t.colunas; x.linhas = t.linhas;
+        const inf = app.querySelector(`[data-tinfo="${i}"]`); if (inf) inf.textContent = `${t.linhas.length} linha(s) · colunas: ${t.colunas.join(', ')}`; }
+      else if (k === 'padrao' && x.tipo !== 'lista') { const n = F.valorEntrada({ tipo: 'numero' }, el.value); x.padrao = isFinite(n) ? n : el.value; }
+      else if (k === 'casas') x.casas = parseInt(el.value, 10) || 0;
+      else x[k] = el.value;
+      if (k === 'tipo') desenharSec('entradas');
+      if (k === 'var') { const t = el.closest('.item').querySelector('code'); if (t) t.textContent = el.value; }
+      sujar(); previas();
+    });
+    app.addEventListener('click', async ev => {
+      const add = ev.target.closest('[data-add]');
+      if (add) {
+        const sec = add.dataset.add;
+        if (sec === 'entradas') m.entradas.push({ id: sid(), var: `entrada${m.entradas.length + 1}`, rotulo: 'Nova entrada', unidade: '', tipo: 'numero', padrao: 0, opcoes: '' });
+        if (sec === 'calculos') m.calculos.push({ id: sid(), var: `calculo${m.calculos.length + 1}`, rotulo: 'Novo cálculo', unidade: '', formula: '0', casas: 2 });
+        if (sec === 'tabelas') m.tabelas.push({ id: sid(), nome: `tabela${m.tabelas.length + 1}`, colunas: ['chave', 'valor'], linhas: [[1, 1]] });
+        desenharSec(sec); previas(); sujar();
+        const ult = app.querySelector(`#fm-${sec} .item:last-child input`); if (ult) { ult.focus(); ult.scrollIntoView({ block: 'center' }); }
+        return;
+      }
+      const b = ev.target.closest('[data-op]'); if (!b) return;
+      const sec = b.dataset.sec, i = Number(b.dataset.i), L = m[sec];
+      if (b.dataset.op === 'rem') { if (!(await confirmar('Remover', `Remover "${esc(L[i].rotulo || L[i].nome || L[i].var)}"?`, 'Remover'))) return; L.splice(i, 1); }
+      if (b.dataset.op === 'sobe' && i > 0) [L[i - 1], L[i]] = [L[i], L[i - 1]];
+      if (b.dataset.op === 'desce' && i < L.length - 1) [L[i + 1], L[i]] = [L[i], L[i + 1]];
+      desenharSec(sec); previas(); sujar();
+    });
+
+    app.querySelector('#fm-desc').onclick = async () => {
+      if (!(await confirmar('Descartar alterações', 'Voltar para as fórmulas salvas?', 'Descartar'))) return;
+      rascModelo = null; formulas();
+    };
+    app.querySelector('#fm-salvar').onclick = async () => {
+      const prob = F.validar(m);
+      if (prob.length) {
+        await dialogo({ titulo: 'Corrija antes de salvar', corpo: `<ul style="margin:0;padding-left:18px">${prob.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` });
+        return;
+      }
+      const erros = F.calcular(m, {}).erros;
+      if (erros.length && !(await dialogo({
+        titulo: 'Há cálculos com erro',
+        corpo: `<p style="margin-top:0">Com os valores padrão das entradas:</p><ul style="padding-left:18px">${erros.map(x => `<li><b>${esc(x.var)}</b>: ${esc(x.msg)}</li>`).join('')}</ul>`,
+        acoes: [{ rotulo: 'Corrigir', valor: false }, { rotulo: 'Salvar mesmo assim', classe: 'prim', valor: true }]
+      }))) return;
+      m.versao = (Number(st.modeloDim().versao) || 0) + 1;
+      st.salvarModeloDim(JSON.parse(JSON.stringify(m)));
+      rascModelo = null;
+      toast(`Fórmulas salvas (versão ${m.versao}).`);
+      formulas();
+    };
+    document.getElementById('fm-mais').onclick = async () => {
+      const r = await dialogo({
+        titulo: 'Modelo de fórmulas',
+        corpo: `<div class="lista">
+          <button class="linha" data-op2="exp">${ICON.backup}<div class="principal"><div class="t1">Exportar modelo</div><div class="t2">Arquivo .json para guardar ou usar em outro aparelho</div></div></button>
+          <label class="linha" style="cursor:pointer">${ICON.doc}<div class="principal"><div class="t1">Importar modelo</div><div class="t2">Substitui as fórmulas da tela (depois toque em Salvar)</div></div><input type="file" id="fm-imp" accept=".json,application/json,text/plain" hidden></label>
+          <button class="linha" data-op2="pad" style="color:var(--danger)">${ICON.lixo}<div class="principal"><div class="t1">Voltar ao modelo de exemplo</div></div></button>
+        </div>`,
+        acoes: [],
+        aoAbrir: (d, fechar) => {
+          d.querySelector('.lista').addEventListener('click', e => { const b = e.target.closest('[data-op2]'); if (b) fechar(b.dataset.op2); });
+          d.querySelector('#fm-imp').addEventListener('change', async e => { const f = e.target.files[0]; if (f) fechar({ arquivo: f }); });
+        }
+      });
+      if (r === 'exp') {
+        const nomeArq = `modelo-dimensionamento-v${m.versao || 1}.json`;
+        window.WhatsApp.baixar(new Blob([JSON.stringify({ app: 'orcamentos-pwa', tipo: 'modelo-dimensionamento', modelo: m }, null, 2)], { type: 'application/json' }), nomeArq);
+      } else if (r === 'pad') {
+        if (!(await confirmar('Modelo de exemplo', 'Trocar as fórmulas da tela pelo modelo de exemplo? Só vale depois de Salvar.', 'Trocar'))) return;
+        rascModelo = { m: F.modeloPadrao(), sujo: true }; rascModelo.m.versao = st.modeloDim().versao; formulas();
+      } else if (r && r.arquivo) {
+        try {
+          const j = JSON.parse(await r.arquivo.text());
+          const nm = j.modelo || j;
+          if (!Array.isArray(nm.calculos) || !Array.isArray(nm.entradas)) throw new Error();
+          nm.tabelas = nm.tabelas || []; nm.versao = st.modeloDim().versao;
+          rascModelo = { m: nm, sujo: true }; formulas(); toast('Modelo importado. Confira e toque em Salvar.');
+        } catch (e) { toast('Arquivo não é um modelo de dimensionamento.'); }
+      }
+    };
   }
 
   /* ---------- Relatórios ---------- */
+
   const STATUS_REL = ['Rascunho', 'Enviado', 'Vencido', 'Aprovado', 'Concluído', 'Recusado'];
   const PERIODOS = [
     ['mes', 'Este mês'], ['mesPassado', 'Mês passado'], ['30', 'Últimos 30 dias'], ['90', 'Últimos 90 dias'],
@@ -1094,6 +1416,9 @@
       <h2>Catálogo</h2>
       <div class="lista"><a href="#/catalogo">${ICON.lista}<div class="principal"><div class="t1">Itens e preços</div><div class="t2">${st.db.catalogo.length} itens cadastrados</div></div></a></div>
 
+      <h2>Dimensionamento</h2>
+      <div class="lista"><a href="#/formulas">${ICON.cabo}<div class="principal"><div class="t1">Fórmulas e tabelas</div><div class="t2">${esc(st.modeloDim().nome)} · versão ${esc(st.modeloDim().versao || 1)}</div></div></a></div>
+
       <h2>Nuvem</h2>
       <div class="card" id="nuvem"></div>
 
@@ -1108,7 +1433,7 @@
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.8.0</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.9.0</p>`;
 
     // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {

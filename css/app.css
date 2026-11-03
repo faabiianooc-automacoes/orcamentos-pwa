@@ -354,3 +354,17 @@ label.check input { width: 20px; min-height: 20px; height: 20px; flex: none; }
 /* Passos (gov.br) */
 ol.passos { margin: 8px 0; padding-left: 20px; display: grid; gap: 14px; }
 ol.passos li::marker { font-weight: 700; color: var(--primary); }
+
+/* Dimensionamento */
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-transform: none; letter-spacing: 0; }
+.campo.oculto { display: none; }
+.dim-l .valor { font-size: 15px; }
+.dim-l.dest { background: var(--ok-soft); }
+.dim-l.dest .t1, .dim-l.dest .valor { color: var(--ok); font-weight: 700; }
+.dim-l.err .valor, .dim-msg, .erro-txt { color: var(--danger) !important; }
+.dim-msg { white-space: normal !important; }
+.fm-prev { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ok); }
+.topo-btn { min-height: 36px; padding: 6px 12px; font-size: 14px; }
+dialog.largo { width: min(640px, calc(100vw - 24px)); }
+dialog .dim-res .lista { box-shadow: none; }

@@ -7,9 +7,75 @@
   const limpar = s => String(s == null ? '' : s)
     .replace(/[–—]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
     .replace(/…/g, '...').replace(/[  ]/g, ' ')
+    .replace(/²/g, '2').replace(/³/g, '3').replace(/√/g, 'raiz de ').replace(/≥/g, '>=').replace(/≤/g, '<=')
     .replace(/[^\x00-\xff\n]/g, '');
 
-  function gerar(o) {
+  /* Seção "Dimensionamento dos circuitos": resumo + detalhe de cada circuito.
+     Usada no PDF do orçamento e no memorial separado. Retorna o novo y. */
+  function secaoDimensionamento(doc, o, y, k) {
+    const st = S();
+    const { W, H, M, corT, corF, sobreF, tintF2 } = k;
+    const circ = o.circuitos || [];
+    const novaPaginaSe = alt => { if (y + alt > H - 22) { doc.addPage(); y = M; } };
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...corT);
+    doc.text('DIMENSIONAMENTO DOS CIRCUITOS', M, y);
+    y += 2;
+    const exemplo = circ.some(c => c.modelo && c.modelo.exemplo);
+    if (exemplo) {
+      y += 4.5; doc.setFontSize(8.5); doc.setTextColor(180, 35, 24);
+      doc.text('ATENÇÃO: calculado com fórmulas de EXEMPLO (valores fictícios). Não utilizar para execução.', M, y);
+    }
+    // Resumo: colunas marcadas como "resumo" (união entre os circuitos)
+    const cols = [];
+    circ.forEach(c => (c.linhas || []).forEach(l => { if (l.resumo && !cols.some(x => x.var === l.var)) cols.push({ var: l.var, rot: l.rotulo + (l.unidade ? ` (${l.unidade})` : '') }); }));
+    doc.autoTable({
+      startY: y + 3,
+      margin: { left: M, right: M, bottom: 20 },
+      head: [['Circuito', ...cols.map(c => limpar(c.rot))]],
+      body: circ.map(c => [limpar(c.nome), ...cols.map(col => { const l = (c.linhas || []).find(x => x.var === col.var); return limpar(l ? l.valor : '-'); })]),
+      styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 1.8, textColor: [20, 32, 41], lineColor: [222, 228, 233], lineWidth: 0.1 },
+      headStyles: { fillColor: corF, textColor: sobreF, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: tintF2 },
+      columnStyles: { 0: { fontStyle: 'bold' } }
+    });
+    y = doc.lastAutoTable.finalY + 7;
+    // Detalhe de cada circuito
+    circ.forEach((c, n) => {
+      novaPaginaSe(30);
+      const corpo = [];
+      const ent = (c.linhas || []).filter(l => l.tipo === 'entrada');
+      const cal = (c.linhas || []).filter(l => l.tipo === 'calculo');
+      if (ent.length) corpo.push([{ content: 'Dados de entrada', colSpan: 3, styles: { fontStyle: 'bold', fillColor: tintF2, textColor: corT } }]);
+      ent.forEach(l => corpo.push([limpar(l.rotulo), limpar(l.valor), limpar(l.unidade)]));
+      if (cal.length) corpo.push([{ content: 'Resultados', colSpan: 3, styles: { fontStyle: 'bold', fillColor: tintF2, textColor: corT } }]);
+      cal.forEach(l => corpo.push([l.destaque ? { content: limpar(l.rotulo), styles: { fontStyle: 'bold' } } : limpar(l.rotulo),
+        { content: limpar(l.valor), styles: l.erro ? { textColor: [180, 35, 24] } : l.destaque ? { fontStyle: 'bold' } : {} }, limpar(l.unidade)]));
+      doc.autoTable({
+        startY: y,
+        margin: { left: M, right: M, bottom: 20 },
+        head: [[{ content: `${n + 1}. ${limpar(c.nome)}`, colSpan: 3 }]],
+        body: corpo,
+        styles: { font: 'helvetica', fontSize: 8, cellPadding: 1.6, textColor: [20, 32, 41], lineColor: [222, 228, 233], lineWidth: 0.1 },
+        headStyles: { fillColor: corF, textColor: sobreF, fontStyle: 'bold' },
+        columnStyles: { 1: { halign: 'right', cellWidth: 40 }, 2: { cellWidth: 18 } }
+      });
+      y = doc.lastAutoTable.finalY + 6;
+    });
+    // Critérios do modelo usado
+    const modelos = [];
+    circ.forEach(c => { const m = c.modelo || {}; const kk = m.nome + '|' + m.versao; if (!modelos.some(x => x.k === kk)) modelos.push({ k: kk, ...m }); });
+    modelos.forEach(m => {
+      const txt = `Critérios: ${m.nome || 'modelo'} (versão ${m.versao || 1}). ${m.criterios || ''}`.trim();
+      const linhas = doc.splitTextToSize(limpar(txt), W - 2 * M);
+      novaPaginaSe(linhas.length * 3.8 + 4);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(90, 100, 110);
+      doc.text(linhas, M, y); y += linhas.length * 3.8 + 2;
+    });
+    return y + 2;
+  }
+
+  function gerar(o, opc = {}) {
+    const memorial = !!opc.memorial;
     const { jsPDF } = window.jspdf;
     const st = S();
     const e = st.db.empresa;
@@ -26,7 +92,7 @@
     const M = 15;
     let y = M;
 
-    doc.setProperties({ title: `Orçamento ${o.numero}`, subject: limpar(o.titulo), author: limpar(e.nome), creator: 'Orçamentos PWA' });
+    doc.setProperties({ title: memorial ? `Dimensionamento ${o.numero}` : `Orçamento ${o.numero}`, subject: limpar(o.titulo), author: limpar(e.nome), creator: 'Orçamentos PWA' });
 
     /* Cabeçalho */
     let xTexto = M;
@@ -51,15 +117,20 @@
     linhasEmp.forEach((l, i) => doc.text(l, xTexto, y + 10 + i * 4));
 
     doc.setTextColor(...corT); doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
-    doc.text('ORÇAMENTO', W - M, y + 5, { align: 'right' });
+    doc.text(memorial ? 'DIMENSIONAMENTO' : 'ORÇAMENTO', W - M, y + 5, { align: 'right' });
     doc.setTextColor(20, 32, 41); doc.setFontSize(10);
-    doc.text(limpar(o.numero), W - M, y + 11, { align: 'right' });
+    doc.text(limpar(memorial ? `Ref. orçamento ${o.numero}` : o.numero), W - M, y + 11, { align: 'right' });
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(90, 100, 110);
+    if (memorial) {
+      doc.text(`Data: ${st.dataBR(st.hoje())}`, W - M, y + 16, { align: 'right' });
+      if (o.dataInicio) doc.text(`Início previsto: ${st.dataBR(o.dataInicio)}`, W - M, y + 20, { align: 'right' });
+    } else {
     doc.text(`Emissão: ${st.dataBR(o.data)}`, W - M, y + 16, { align: 'right' });
     doc.text(`Válido até: ${st.dataBR(st.validadeAte(o))}`, W - M, y + 20, { align: 'right' });
     if (o.dataInicio) doc.text(`Início previsto: ${st.dataBR(o.dataInicio)}`, W - M, y + 24, { align: 'right' });
+    }
 
-    y += o.dataInicio ? 31 : 28;
+    y += o.dataInicio && !memorial ? 31 : 28;
     doc.setDrawColor(...corF); doc.setLineWidth(0.8); doc.line(M, y, W - M, y);
     y += 7;
 
@@ -87,6 +158,18 @@
       y += tl.length * 5 + 2;
     }
 
+    const k = { W, H, M, corT, corF, sobreF, tintF2 };
+    const novaPaginaSe = alt => { if (y + alt > H - 22) { doc.addPage(); y = M; } };
+    const temDim = (o.circuitos || []).length > 0;
+
+    if (memorial) {
+      y = secaoDimensionamento(doc, o, y, k);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+      const decl = doc.splitTextToSize(limpar('Declaro estar de acordo com os dados, critérios e resultados do dimensionamento acima, que servirão de base para a execução dos serviços.'), W - 2 * M);
+      novaPaginaSe(decl.length * 4.2 + 52); // declaração e assinaturas na mesma página
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(40, 50, 60);
+      doc.text(decl, M, y + 2); y += decl.length * 4.2 + 2;
+    } else {
     /* Itens */
     doc.autoTable({
       startY: y,
@@ -111,7 +194,6 @@
     y = doc.lastAutoTable.finalY + 6;
 
     /* Totais */
-    const novaPaginaSe = alt => { if (y + alt > H - 22) { doc.addPage(); y = M; } };
     novaPaginaSe(26);
     const xr = W - M, xl = W - M - 70;
     doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(70, 80, 90);
@@ -145,6 +227,9 @@
       y += 8 + linhas.length * 4.2;
     });
 
+    if (temDim && o.dimNoPdf !== false) { doc.addPage(); y = M; y = secaoDimensionamento(doc, o, y, k); }
+    }
+
     /* Assinaturas: responsável (rubrica automática) à esquerda, aceite do cliente à direita */
     novaPaginaSe(42);
     y += 8;
@@ -167,20 +252,22 @@
     doc.text(limpar(c.nome || 'Cliente'), xCli + colW / 2, yLinha + 4.5, { align: 'center' });
     doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(110, 120, 130);
     doc.text(limpar(e.assinaturaNome && e.nome && e.assinaturaNome !== e.nome ? e.nome : 'Responsável'), M + colW / 2, yLinha + 8.5, { align: 'center' });
-    doc.text('Aceite do cliente   Data: ____/____/______', xCli + colW / 2, yLinha + 8.5, { align: 'center' });
+    doc.text(`${memorial ? 'De acordo do cliente' : 'Aceite do cliente'}   Data: ____/____/______`, xCli + colW / 2, yLinha + 8.5, { align: 'center' });
 
     /* Rodapé */
     const total = doc.getNumberOfPages();
     for (let p = 1; p <= total; p++) {
       doc.setPage(p);
       doc.setFontSize(7.5); doc.setTextColor(140, 150, 160); doc.setFont('helvetica', 'normal');
-      doc.text(limpar(`${o.numero} · ${e.nome || ''}`), M, H - 8);
+      doc.text(limpar(`${memorial ? 'Dimensionamento · ' : ''}${o.numero} · ${e.nome || ''}`), M, H - 8);
       doc.text(`Página ${p} de ${total}`, W - M, H - 8, { align: 'right' });
     }
     return doc.output('blob');
   }
 
   const nomeArquivo = o => `Orcamento-${String(o.numero).replace(/[^\w-]/g, '')}.pdf`;
+  const nomeMemorial = o => `Dimensionamento-${String(o.numero).replace(/[^\w-]/g, '')}.pdf`;
+  const gerarMemorial = o => gerar(o, { memorial: true });
 
-  window.PDF = { gerar, nomeArquivo };
+  window.PDF = { gerar, nomeArquivo, gerarMemorial, nomeMemorial };
 })();

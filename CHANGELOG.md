@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0] - 2026-11-03
+- Dimensionamento (Início → Ferramentas → Dimensionamento): calculadora de circuitos com resultados ao vivo; salvar o circuito em um orçamento.
+- Fórmulas editáveis (Dimensionamento → Fórmulas, ou Ajustes): entradas, cálculos e tabelas no estilo do Excel em português (SE, PROCV, PROXIMO, RAIZ, MAXIMO...), prévia do resultado em cada fórmula, validação antes de salvar, versão do modelo, exportar/importar em .json e voltar ao exemplo. O modelo sincroniza na nuvem e vai no backup.
+- Vem com um modelo de EXEMPLO (valores fictícios), marcado na tela e no PDF, até ser trocado pelas fórmulas da planilha.
+- Orçamento: seção Dimensionamento com os circuitos; opção de incluir no PDF do orçamento; PDF separado do dimensionamento com declaração e campo "De acordo do cliente", para enviar pelo WhatsApp ou baixar.
+- Circuitos guardam os resultados e a versão das fórmulas usadas: o PDF não muda se as fórmulas forem alteradas depois; ao editar o circuito, ele é recalculado com as fórmulas atuais.
+
 ## [1.8.0] - 2026-11-03
 - Novo menu Dimensionamento (Início → Ferramentas), reservado para os cálculos de cabos e proteção conforme a NBR 5410, que virão da planilha de dimensionamento.
 

@@ -53,13 +53,13 @@
   /* Retorna: 'compartilhado' | 'cancelado' | 'fallback'
      Obs.: ao receber um documento, o WhatsApp costuma descartar o texto que vai junto
      (só imagens viram legenda). Por isso o app copia a mensagem e oferece enviá-la depois. */
-  async function enviarPDF(o, blob, nome) {
+  async function enviarPDF(o, blob, nome, texto, titulo) {
     nome = nome || window.PDF.nomeArquivo(o);
     const arquivo = new File([blob], nome, { type: 'application/pdf' });
-    const texto = mensagem(o);
+    texto = texto || mensagem(o);
     if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
       try {
-        await navigator.share({ files: [arquivo], title: `Orçamento ${o.numero}`, text: texto });
+        await navigator.share({ files: [arquivo], title: titulo || `Orçamento ${o.numero}`, text: texto });
         return 'compartilhado';
       } catch (err) {
         if (err && err.name === 'AbortError') return 'cancelado';
@@ -70,9 +70,16 @@
     return 'fallback';
   }
 
+  // Mensagem do memorial de dimensionamento (arquivo separado para o "de acordo")
+  function mensagemMemorial(o) {
+    const st = S(); const e = st.db.empresa; const c = st.cliente(o.clienteId) || {};
+    const nome = String(c.nome || '').trim().split(/\s+/)[0] || '';
+    return `Olá${nome ? ', ' + nome : ''}! Segue o dimensionamento dos circuitos referente ao orçamento ${o.numero}. Por favor, confira e me devolva com o seu "de acordo".\n${e.nome || ''}`.trim();
+  }
+
   async function copiar(texto) {
     try { await navigator.clipboard.writeText(texto); return true; } catch (e) { return false; }
   }
 
-  window.WhatsApp = { mensagem, linkConversa, abrirConversa, enviarPDF, baixar, copiar, podeCompartilharArquivo };
+  window.WhatsApp = { mensagem, mensagemMemorial, linkConversa, abrirConversa, enviarPDF, baixar, copiar, podeCompartilharArquivo };
 })();

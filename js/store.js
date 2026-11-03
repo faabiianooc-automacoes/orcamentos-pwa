@@ -330,7 +330,9 @@
       observacoes: e.observacoesPadrao || '',
       criadoEm: new Date().toISOString(),
       atualizadoEm: new Date().toISOString(),
-      enviadoEm: ''
+      enviadoEm: '',
+      circuitos: [],     // dimensionamento (ver js/formulas.js)
+      dimNoPdf: true     // incluir o dimensionamento no PDF do orçamento
     };
     db.orcamentos.unshift(o);
     salvar(); marcar('orcamentos', o.id); marcar('meta', 'contador');
@@ -354,6 +356,7 @@
       titulo: o.titulo ? o.titulo + ' (cópia)' : ''
     });
     n.itens = n.itens.map(i => ({ ...i, id: uid() }));
+    n.circuitos = (n.circuitos || []).map(c => ({ ...c, id: uid() }));
     salvarOrcamento(n);
     return n;
   }
@@ -418,6 +421,9 @@
     if (semDesc) lista.push({ msg: `${semDesc} item(ns) sem descrição`, bloqueia: true });
     const semValor = o.itens.filter(i => num(i.valor) <= 0).length;
     if (semValor) lista.push({ msg: `${semValor} item(ns) sem valor`, bloqueia: false });
+    const circ = o.circuitos || [];
+    if (circ.some(c => c.modelo && c.modelo.exemplo)) lista.push({ msg: 'Dimensionamento feito com fórmulas de exemplo (fictícias)', bloqueia: false, ir: '#/formulas' });
+    if (circ.some(c => c.erros)) lista.push({ msg: 'Dimensionamento com erro em algum circuito', bloqueia: false });
     const semQtd = o.itens.filter(i => num(i.qtd) <= 0).length;
     if (semQtd) lista.push({ msg: `${semQtd} item(ns) com quantidade zero`, bloqueia: false });
     if (!String(o.pagamento || '').trim()) lista.push({ msg: 'Condições de pagamento', bloqueia: false });
@@ -447,6 +453,32 @@
     salvar(); marcar('meta', 'empresa');
   }
 
+  /* ---------- Modelo de dimensionamento (fórmulas editáveis) ----------
+     Fica junto dos dados da empresa: vai no backup e sincroniza na nuvem. */
+  let modeloExemplo = null;
+  function modeloDim() {
+    if (db.empresa.modeloDim && db.empresa.modeloDim.calculos) return db.empresa.modeloDim;
+    if (!modeloExemplo) modeloExemplo = window.Formulas.modeloPadrao();
+    return modeloExemplo;
+  }
+  function salvarModeloDim(m) {
+    m.atualizadoEm = new Date().toISOString();
+    salvarEmpresa({ modeloDim: m });
+  }
+  function restaurarModeloDim() { modeloExemplo = null; const e = { ...db.empresa }; delete e.modeloDim; db.empresa = e; salvarEmpresa({}); }
+
+  /* Circuito calculado: guarda as entradas e uma cópia dos resultados,
+     para o PDF não mudar se as fórmulas forem alteradas depois. */
+  function calcularCircuito(nome, entradas, id) {
+    const m = modeloDim();
+    const r = window.Formulas.linhas(m, entradas);
+    return {
+      id: id || uid(), nome: String(nome || '').trim() || 'Circuito', entradas: { ...entradas },
+      modelo: { nome: m.nome, versao: m.versao, exemplo: !!m.exemplo, criterios: m.criterios || '' },
+      linhas: r.linhas, erros: r.erros.length, calculadoEm: new Date().toISOString()
+    };
+  }
+
   /* ---------- Backup ---------- */
   const exportar = () => JSON.stringify({ app: 'orcamentos-pwa', exportadoEm: new Date().toISOString(), dados: db }, null, 2);
   function importar(texto) {
@@ -474,6 +506,7 @@
     orcamento, novoOrcamento, salvarOrcamento, duplicarOrcamento, excluirOrcamento, orcamentoVazio,
     totais, validadeAte, diasEntre, agenda, statusExibido, pendencias,
     salvarItemCatalogo, excluirItemCatalogo, salvarEmpresa,
+    modeloDim, salvarModeloDim, restaurarModeloDim, calcularCircuito,
     exportar, importar, marcarBackup, ultimoBackup, temDados, resetar,
     // nuvem
     set aoAlterar(fn) { aoAlterar = fn || (() => {}); },
