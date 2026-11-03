@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.8.0] - 2026-11-03
+- Novo menu Dimensionamento (Início → Ferramentas), reservado para os cálculos de cabos e proteção conforme a NBR 5410, que virão da planilha de dimensionamento.
+
 ## [1.7.0] - 2026-11-03
 - Data prevista de início no orçamento (obrigatória para gerar o PDF e enviar); aparece no PDF e pode ir na mensagem do WhatsApp com {inicio}.
 - Novo status "Concluído" para orçamentos já executados.

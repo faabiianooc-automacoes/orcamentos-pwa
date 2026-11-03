@@ -104,6 +104,7 @@ main { max-width: 760px; margin: 0 auto; padding: 16px; outline: none; }
 .lista > :first-child { border-top: 0; }
 .lista > a:hover, .lista > button.linha:hover { background: var(--surface-2); }
 .linha .principal, .lista > a > .principal { flex: 1; min-width: 0; }
+.lista > a > svg:last-child { width: 18px; height: 18px; color: var(--muted); flex: none; }
 .lista .valor { white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }
 .linha .t1 { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .linha .t2 { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

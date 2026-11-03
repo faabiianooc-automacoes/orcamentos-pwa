@@ -1,6 +1,6 @@
 /* Telas e navegação do app. Rotas por hash:
    #/inicio · #/orcamentos · #/orcamento/:id · #/clientes · #/cliente/:id|novo
-   #/ajustes · #/catalogo · #/relatorios?visao=avencer|executar|atrasados */
+   #/ajustes · #/catalogo · #/dimensionamento · #/relatorios?visao=avencer|executar|atrasados */
 (function () {
   'use strict';
   const st = window.Store;
@@ -30,7 +30,8 @@
     relogio: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
     agenda: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
     filtro: '<svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>',
-    seta: '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>'
+    seta: '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>',
+    cabo: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>'
   };
 
   let toastTimer;
@@ -105,7 +106,7 @@
     const novo = app.cloneNode(false);
     app.replaceWith(novo);
     app = novo;
-    const telas = { inicio, orcamentos, orcamento: editorOrcamento, clientes, cliente: formCliente, ajustes, catalogo, relatorios };
+    const telas = { inicio, orcamentos, orcamento: editorOrcamento, clientes, cliente: formCliente, ajustes, catalogo, relatorios, dimensionamento };
     (telas[rota] || inicio)(id);
     window.scrollTo(0, 0);
   }
@@ -154,6 +155,9 @@
         <div class="stat"><div class="rot">Taxa de aprovação</div><div class="num">${taxa}</div></div>
       </div>
       <div class="acoes"><a class="btn prim" href="#/orcamento/novo">${ICON.mais} Novo orçamento</a><a class="btn" href="#/cliente/novo">${ICON.mais} Novo cliente</a></div>
+      <h2>Ferramentas</h2>
+      <div class="lista"><a href="#/dimensionamento"><span class="ag-ic ok">${ICON.cabo}</span>
+        <div class="principal"><div class="t1">Dimensionamento</div><div class="t2">Cabos e proteção conforme a NBR 5410</div></div>${ICON.seta}</a></div>
       <h2>Recentes</h2>
       ${listaOrcamentos(db.orcamentos.slice(0, 6))}`;
     const bk = app.querySelector('#bk-inicio');
@@ -595,6 +599,30 @@
     };
 
     desenharItens(); atualizarTotais(); atualizarPendencias();
+  }
+
+  /* ---------- Dimensionamento (NBR 5410) ----------
+     Tela reservada. Os cálculos virão da planilha .xlsx do usuário
+     (js/dimensionamento.js), reproduzindo as mesmas fórmulas e tabelas. */
+  function dimensionamento() {
+    marcarAba('inicio');
+    topo('Dimensionamento', { voltar: '#/inicio' });
+    const D = window.Dimensionamento;
+    if (D && D.pronto) { D.tela(app, { st, esc, toast, ICON }); return; }
+    app.innerHTML = `
+      <div class="aviso info">${ICON.info}<div><p><b>Em preparação</b></p>
+        <p class="ajuda" style="margin:2px 0 0">Os cálculos serão feitos com as fórmulas e tabelas da sua planilha de dimensionamento, seguindo a NBR 5410.</p></div></div>
+      <h2>O que esta tela vai calcular</h2>
+      <div class="lista">
+        ${[
+          ['Corrente de projeto', 'A partir da potência, tensão, fator de potência e tipo de circuito'],
+          ['Seção pela capacidade de condução', 'Método de instalação, temperatura e agrupamento'],
+          ['Seção pela queda de tensão', 'Comprimento do circuito e limite admissível'],
+          ['Seção mínima', 'Iluminação, tomadas e força'],
+          ['Proteção', 'Disjuntor compatível com o cabo escolhido']
+        ].map(([t, d]) => `<div class="linha"><span class="ag-ic ok">${ICON.cabo}</span><div class="principal"><div class="t1">${t}</div><div class="t2" style="white-space:normal">${d}</div></div></div>`).join('')}
+      </div>
+      <p class="ajuda" style="margin-top:12px">A lista acima é provisória: os campos e critérios finais serão os da planilha.</p>`;
   }
 
   /* ---------- Relatórios ---------- */
@@ -1080,7 +1108,7 @@
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.7.0</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.8.0</p>`;
 
     // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {
