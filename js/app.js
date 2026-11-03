@@ -355,7 +355,9 @@
       elItens.innerHTML = o.itens.map((it, i) => `
         <div class="item ${st.num(it.valor) <= 0 ? 'sem-valor' : ''}" data-idx="${i}">
           <div class="item-topo"><span class="n">ITEM ${i + 1}</span>
-            <button class="icon-btn" data-acao="rem" aria-label="Remover item ${i + 1}">${ICON.lixo}</button></div>
+            <span class="row" style="gap:4px">${it.tipo === 'Material' || it.tec ? `<button class="btn btn-peq" type="button" data-acao="tec">${ICON.cabo} ${it.tec ? 'Especificação' : 'Especificar'}</button>` : ''}
+            <button class="icon-btn" data-acao="rem" aria-label="Remover item ${i + 1}">${ICON.lixo}</button></span></div>
+          ${it.tec ? `<div class="item-tec" data-acao="tec">${esc(TEC.resumo(it.tec) || TEC.classe(it.tec.classe).nome)}</div>` : ''}
           <div class="campos">
             <div class="campo"><input data-k="descricao" value="${esc(it.descricao)}" placeholder="Descrição do item" aria-label="Descrição"></div>
             <div class="campo c2 m3"><label>Tipo</label><select data-k="tipo">${opt(st.TIPOS_ITEM, it.tipo)}</select></div>
@@ -444,6 +446,7 @@
     });
     app.addEventListener('change', ev => {
       const el = ev.target;
+      if (el.dataset.k === 'tipo') desenharItens();
       if (el.dataset.f === 'status' && el.value === 'Enviado' && !o.enviadoEm) o.enviadoEm = new Date().toISOString();
       if (el.dataset.f === 'status' && el.value === 'Concluído' && !o.concluidoEm) o.concluidoEm = new Date().toISOString();
       if (el.dataset.f === 'dataInicio') el.classList.toggle('invalido', !el.value);
@@ -454,6 +457,21 @@
     });
 
     elItens.addEventListener('click', async ev => {
+      const bt = ev.target.closest('[data-acao="tec"]');
+      if (bt) {
+        const it = o.itens[Number(bt.closest('[data-idx]').dataset.idx)];
+        let novo;
+        const r = await dialogo({
+          titulo: 'Especificação técnica',
+          corpo: `<p class="ajuda" style="margin-top:0"><b>${esc(it.descricao || 'Item')}</b>. Vale só para este orçamento; o catálogo não muda.</p>${htmlTec(it.tec, true)}`,
+          acoes: [{ rotulo: 'Cancelar', valor: null }, { rotulo: 'Salvar', classe: 'prim', valor: 'ok', antes: d => { novo = lerTec(d); } }],
+          aoAbrir: d => { ligarTec(d, null); if (!it.tec) { const sel = d.querySelector('[data-tc]'); const sug = TEC.sugerir(it.descricao); if (sug) { sel.value = sug; sel.dispatchEvent(new Event('change')); } } }
+        });
+        if (r !== 'ok') return;
+        if (novo) it.tec = novo; else delete it.tec;
+        desenharItens(); agendarSalvar();
+        return;
+      }
       const b = ev.target.closest('[data-acao="rem"]'); if (!b) return;
       const i = Number(b.closest('[data-idx]').dataset.idx);
       const it = o.itens[i];
@@ -493,7 +511,7 @@
       if (sel !== 'ok') return;
       ids.forEach(idc => {
         const i = cat.find(x => x.id === idc);
-        if (i) o.itens.push({ id: st.uid(), descricao: i.descricao, tipo: i.tipo, unidade: i.unidade, qtd: 1, valor: st.num(i.valor) });
+        if (i) o.itens.push({ id: st.uid(), descricao: i.descricao, tipo: i.tipo, unidade: i.unidade, qtd: 1, valor: st.num(i.valor), ...(i.tec ? { tec: { ...i.tec } } : {}) });
       });
       desenharItens(); atualizarTotais(); agendarSalvar();
       if (ids.length) toast(`${ids.length} item(ns) adicionado(s).`);
@@ -1405,6 +1423,7 @@
       <div class="card" id="pad"><div class="campos">
         <div class="campo c3 m3"><label for="p-pre">Prefixo do número</label><input id="p-pre" data-f="prefixo" value="${esc(e.prefixo)}" maxlength="8"><span class="ajuda">Ex.: ${esc(e.prefixo || 'ORC')}-${new Date().getFullYear()}-0001</span></div>
         <div class="campo c3 m3"><label for="p-val">Validade (dias)</label><input id="p-val" data-f="validadeDias" type="number" min="1" value="${esc(e.validadeDias)}"></div>
+        <div class="campo"><label class="check"><input type="checkbox" data-f="tecNoPdf" ${e.tecNoPdf !== false ? 'checked' : ''}> Mostrar a especificação técnica dos materiais no PDF</label></div>
         <div class="campo"><label for="p-pz">Prazo de execução</label><textarea id="p-pz" data-f="prazoPadrao">${esc(e.prazoPadrao)}</textarea></div>
         <div class="campo"><label for="p-pg">Condições de pagamento</label><textarea id="p-pg" data-f="pagamentoPadrao">${esc(e.pagamentoPadrao)}</textarea></div>
         <div class="campo"><label for="p-ga">Garantia</label><textarea id="p-ga" data-f="garantiaPadrao">${esc(e.garantiaPadrao)}</textarea></div>
@@ -1433,7 +1452,7 @@
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.9.0</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.10.0</p>`;
 
     // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {
@@ -1778,6 +1797,58 @@
 
   /* ---------- Catálogo ---------- */
   // Busca + chips de categoria. Usado na tela do catálogo e no seletor do orçamento.
+  /* ---------- Especificação técnica (js/tecnico.js) ---------- */
+  const TEC = window.Tecnico;
+  function camposTec(classeId, tec) {
+    return TEC.campos(classeId).map(f => {
+      const v = tec[f.k] == null ? '' : String(tec[f.k]);
+      const rot = `${esc(f.rot)}${f.un && f.un !== 'P' ? ` <span class="muted">(${esc(f.un)})</span>` : ''}`;
+      const larg = f.k === 'obs' ? '' : 'c3 m3';
+      if (f.tipo === 'lista') {
+        const ops = f.opcoes.includes(v) || !v ? f.opcoes : [...f.opcoes, v];
+        return `<div class="campo ${larg}"><label>${rot}</label><select data-t="${f.k}"><option value="">-</option>${ops.map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></div>`;
+      }
+      return `<div class="campo ${larg}"><label>${rot}</label><input data-t="${f.k}" value="${esc(v)}" ${f.tipo === 'num' ? 'inputmode="decimal"' : ''} placeholder="${esc(f.ph || '')}"></div>`;
+    }).join('');
+  }
+  // Bloco "Informações técnicas" para diálogos. aberto: começa expandido
+  function htmlTec(tec, aberto) {
+    tec = tec || {};
+    return `<details class="tec" ${aberto ? 'open' : ''}><summary>${ICON.cabo}<span>Informações técnicas</span><span class="muted">opcional</span></summary>
+      <div class="campos" style="margin-top:10px">
+        <div class="campo"><label>Tipo de material</label><select data-tc>
+          <option value="">Sem especificação</option>${TEC.CLASSES.map(c => `<option value="${c.id}" ${c.id === tec.classe ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></div>
+      </div>
+      <div class="campos tec-campos" style="margin-top:12px">${tec.classe ? camposTec(tec.classe, tec) : ''}</div>
+      <p class="ajuda tec-res"></p></details>`;
+  }
+  function lerTec(raiz) {
+    const sel = raiz.querySelector('[data-tc]'); if (!sel || !sel.value) return null;
+    const t = { classe: sel.value };
+    raiz.querySelectorAll('[data-t]').forEach(el => { t[el.dataset.t] = el.value; });
+    return TEC.limpar(t);
+  }
+  // Liga a troca de tipo (mantém marca/modelo) e a prévia do resumo. descEl: sugere o tipo pela descrição
+  function ligarTec(raiz, descEl) {
+    const sel = raiz.querySelector('[data-tc]'); if (!sel) return;
+    let escolhido = !!sel.value;
+    const prev = () => { const r = TEC.resumo(lerTec(raiz)); raiz.querySelector('.tec-res').textContent = r ? 'No PDF: ' + r : ''; };
+    const trocar = () => {
+      const atual = lerTec(raiz) || {};
+      raiz.querySelector('.tec-campos').innerHTML = sel.value ? camposTec(sel.value, atual) : '';
+      prev();
+    };
+    sel.addEventListener('change', () => { escolhido = true; trocar(); });
+    raiz.querySelector('.tec-campos').addEventListener('input', prev);
+    raiz.querySelector('.tec-campos').addEventListener('change', prev);
+    if (descEl) descEl.addEventListener('input', () => {
+      if (escolhido) return;
+      const sug = TEC.sugerir(descEl.value);
+      if (sug !== sel.value) { sel.value = sug; trocar(); }
+    });
+    prev();
+  }
+
   function filtrosCatalogo(itens, placeholder) {
     const usados = st.GRUPOS.filter(g => itens.some(i => (i.grupo || 'Outros') === g));
     return `<div class="busca">${ICON.busca}<input type="search" id="qc" placeholder="${esc(placeholder)}" aria-label="Buscar no catálogo"></div>
@@ -1797,9 +1868,9 @@
           <span class="muted">${doGrupo.length} itens${modo === 'editar' && semPreco ? ` · ${semPreco} sem preço` : ''}</span></div>` +
         doGrupo.map(i => modo === 'escolher'
           ? `<label class="linha" data-grupo="${esc(g)}" style="cursor:pointer"><input type="checkbox" value="${i.id}" style="width:20px;min-height:20px">
-              <div class="principal"><div class="t1">${esc(i.descricao)}</div><div class="t2">${esc(i.tipo)} · ${esc(i.unidade)}</div></div>
+              <div class="principal"><div class="t1">${esc(i.descricao)}</div><div class="t2">${esc(i.tipo)} · ${esc(i.unidade)}${i.tec ? ' · ' + esc(TEC.resumo(i.tec)) : ''}</div></div>
               <div class="valor">${preco(i)}</div></label>`
-          : `<button class="linha" data-grupo="${esc(g)}" data-id="${i.id}"><div class="principal"><div class="t1">${esc(i.descricao)}</div><div class="t2">${esc(i.tipo)} · ${esc(i.unidade)}</div></div>
+          : `<button class="linha" data-grupo="${esc(g)}" data-id="${i.id}"><div class="principal"><div class="t1">${esc(i.descricao)}</div><div class="t2">${esc(i.tipo)} · ${esc(i.unidade)}${i.tec ? ' · ' + esc(TEC.resumo(i.tec)) : ''}</div></div>
               <div class="valor">${preco(i)}</div></button>`).join('');
     }).join('')}<div class="vazio" id="lc-vazio" hidden>Nenhum item encontrado.</div></div>`;
   }
@@ -1863,6 +1934,7 @@
     acoes.push({ rotulo: 'Salvar', classe: 'prim', valor: 'salvar', antes: d => {
       dados = lerCampos(d);
       if (!dados.descricao.trim()) { d.querySelector('[data-f="descricao"]').classList.add('invalido'); return false; }
+      dados.tec = lerTec(d);
       return true;
     } });
     const rolagem = window.scrollY;
@@ -1874,11 +1946,17 @@
         <div class="campo c2 m3"><label>Tipo</label><select data-f="tipo">${opt(st.TIPOS_ITEM, it.tipo)}</select></div>
         <div class="campo c2 m3"><label>Unidade</label><select data-f="unidade">${opt(st.UNIDADES.includes(it.unidade) ? st.UNIDADES : [...st.UNIDADES, it.unidade], it.unidade)}</select></div>
         <div class="campo c2"><label>Preço (R$)</label><input class="num" inputmode="decimal" data-f="valor" value="${st.num(it.valor) ? esc(st.dec(it.valor)) : ''}" placeholder="0,00"></div>
-      </div>`,
-      acoes
+      </div>
+      ${htmlTec(it.tec, !!it.tec || it.tipo === 'Material')}`,
+      acoes,
+      aoAbrir: d => ligarTec(d, item ? null : d.querySelector('[data-f="descricao"]'))
     });
     const voltar = () => { catalogo(); window.scrollTo(0, rolagem); };
-    if (r === 'salvar') { st.salvarItemCatalogo({ ...it, ...dados, descricao: dados.descricao.trim(), valor: st.num(dados.valor) }); toast('Item salvo.'); voltar(); }
+    if (r === 'salvar') {
+      const novo = { ...it, ...dados, descricao: dados.descricao.trim(), valor: st.num(dados.valor) };
+      if (!novo.tec) delete novo.tec;
+      st.salvarItemCatalogo(novo); toast('Item salvo.'); voltar();
+    }
     if (r === 'excluir' && await confirmar('Excluir item', `Excluir "${esc(it.descricao)}" do catálogo?`, 'Excluir')) { st.excluirItemCatalogo(it.id); voltar(); }
   }
 

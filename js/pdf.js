@@ -171,6 +171,14 @@
       doc.text(decl, M, y + 2); y += decl.length * 4.2 + 2;
     } else {
     /* Itens */
+    // Largura da coluna Descrição = página menos as colunas de largura fixa
+    const LARG_DESC = W - 2 * M - (8 + 22 + 13 + 13 + 26 + 28) - 4.4;
+    const LH_SPEC = 7.3 * 1.15 * 0.3528;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.3);
+    const specs = o.itens.map(i => {
+      const r = i.tec && e.tecNoPdf !== false && window.Tecnico ? window.Tecnico.resumo(i.tec) : '';
+      return r ? doc.splitTextToSize(limpar(r), LARG_DESC) : null;
+    });
     doc.autoTable({
       startY: y,
       margin: { left: M, right: M, bottom: 20 },
@@ -182,11 +190,25 @@
       styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 2.2, textColor: [20, 32, 41], lineColor: [222, 228, 233], lineWidth: 0.1 },
       headStyles: { fillColor: corF, textColor: sobreF, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: tintF2 },
+      // Especificação técnica abaixo da descrição, menor e em cinza:
+      // reserva espaço no fim da célula (didParseCell) e escreve ali (didDrawCell)
+      didParseCell: d => {
+        if (d.section !== 'body' || d.column.index !== 1) return;
+        const sp = specs[d.row.index]; if (!sp) return;
+        const pad = 2.2;
+        d.cell.styles.cellPadding = { top: pad, left: pad, right: pad, bottom: pad + sp.length * LH_SPEC + 0.6 };
+      },
+      didDrawCell: d => {
+        if (d.section !== 'body' || d.column.index !== 1) return;
+        const sp = specs[d.row.index]; if (!sp) return;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.3); doc.setTextColor(100, 110, 120);
+        doc.text(sp, d.cell.x + 2.2, d.cell.y + d.cell.height - 2.2 - sp.length * LH_SPEC + LH_SPEC * 0.78);
+      },
       columnStyles: {
         0: { cellWidth: 8, halign: 'center' },
         2: { cellWidth: 22 },
         3: { cellWidth: 13, halign: 'right' },
-        4: { cellWidth: 11, halign: 'center' },
+        4: { cellWidth: 13, halign: 'center' },
         5: { cellWidth: 26, halign: 'right' },
         6: { cellWidth: 28, halign: 'right' }
       }

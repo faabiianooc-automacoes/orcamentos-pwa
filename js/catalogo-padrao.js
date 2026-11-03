@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  const VERSAO_CATALOGO = 2;
+  const VERSAO_CATALOGO = 3;
 
   // Ordem em que as categorias aparecem nas listas
   const GRUPOS = [
@@ -22,7 +22,7 @@
     'Outros'
   ];
 
-  // [descrição, tipo, unidade]
+  // [descrição, tipo, unidade, especificação técnica opcional (ver js/tecnico.js)]
   const ITENS = {
     'Visita e diagnóstico': [
       ['Visita técnica e levantamento', 'Serviço', 'un'],
@@ -95,13 +95,21 @@
     ],
     'Materiais elétricos': [
       ['Material elétrico diverso (conectores, fita, buchas, parafusos)', 'Material', 'vb'],
-      ['Tomada / interruptor (peça)', 'Material', 'un'],
-      ['Disjuntor (peça)', 'Material', 'un'],
-      ['Cabo flexível 1,5 mm²', 'Material', 'm'],
-      ['Cabo flexível 2,5 mm²', 'Material', 'm'],
-      ['Cabo flexível 4 mm²', 'Material', 'm'],
-      ['Cabo flexível 6 mm²', 'Material', 'm'],
-      ['Eletroduto / canaleta', 'Material', 'm'],
+      ['Tomada / interruptor (peça)', 'Material', 'un', { classe: 'tomada', corrente: '10', padrao: 'NBR 14136 (2P+T)' }],
+      ['Tomada 20 A (peça)', 'Material', 'un', { classe: 'tomada', corrente: '20', padrao: 'NBR 14136 (2P+T)' }],
+      ['Disjuntor (peça)', 'Material', 'un', { classe: 'disjuntor', polos: '1', curva: 'C', norma: 'NBR NM 60898' }],
+      ['Interruptor diferencial (DR) 30 mA', 'Material', 'un', { classe: 'dr', idn: '30', polos: '2', tipo_dr: 'AC' }],
+      ['DPS - dispositivo de proteção contra surtos', 'Material', 'un', { classe: 'dps', classe_dps: 'II', uc: '275' }],
+      ['Cabo flexível 1,5 mm²', 'Material', 'm', { classe: 'cabo', secao: '1,5', tipo: 'Flexível', isolacao: 'PVC 70 °C', tensao_iso: '450/750 V', material: 'Cobre' }],
+      ['Cabo flexível 2,5 mm²', 'Material', 'm', { classe: 'cabo', secao: '2,5', tipo: 'Flexível', isolacao: 'PVC 70 °C', tensao_iso: '450/750 V', material: 'Cobre' }],
+      ['Cabo flexível 4 mm²', 'Material', 'm', { classe: 'cabo', secao: '4', tipo: 'Flexível', isolacao: 'PVC 70 °C', tensao_iso: '450/750 V', material: 'Cobre' }],
+      ['Cabo flexível 6 mm²', 'Material', 'm', { classe: 'cabo', secao: '6', tipo: 'Flexível', isolacao: 'PVC 70 °C', tensao_iso: '450/750 V', material: 'Cobre' }],
+      ['Cabo flexível 10 mm²', 'Material', 'm', { classe: 'cabo', secao: '10', tipo: 'Flexível', isolacao: 'PVC 70 °C', tensao_iso: '450/750 V', material: 'Cobre' }],
+      ['Cabo PP 3 x 2,5 mm²', 'Material', 'm', { classe: 'cabo', secao: '2,5', tipo: 'PP (multipolar)', condutores: '3', isolacao: 'PVC 70 °C', tensao_iso: '450/750 V', material: 'Cobre' }],
+      ['Eletroduto / canaleta', 'Material', 'm', { classe: 'eletroduto' }],
+      ['Lâmpada LED', 'Material', 'un', { classe: 'iluminacao', tensao: 'Bivolt' }],
+      ['Luminária / plafon LED', 'Material', 'un', { classe: 'iluminacao', tensao: 'Bivolt' }],
+      ['Contator', 'Material', 'un', { classe: 'contator' }],
       ['Caixa de passagem / caixa 4x2', 'Material', 'un']
     ],
     'Automação': [
@@ -118,7 +126,7 @@
 
   const lista = [];
   Object.entries(ITENS).forEach(([grupo, itens]) =>
-    itens.forEach(([descricao, tipo, unidade]) => lista.push({ descricao, tipo, unidade, grupo })));
+    itens.forEach(([descricao, tipo, unidade, tec]) => lista.push({ descricao, tipo, unidade, grupo, ...(tec ? { tec } : {}) })));
 
   window.CatalogoPadrao = { VERSAO_CATALOGO, GRUPOS, itens: lista };
 })();

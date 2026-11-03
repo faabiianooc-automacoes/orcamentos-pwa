@@ -1,11 +1,12 @@
 /* Service worker: guarda o app no aparelho para funcionar sem internet.
    Ao publicar uma nova versão, aumente VERSAO para forçar a atualização. */
-const VERSAO = 'orcamentos-v1.9.0';
+const VERSAO = 'orcamentos-v1.10.0';
 const ARQUIVOS = [
   './',
   'index.html',
   'manifest.webmanifest',
   'css/app.css',
+  'js/tecnico.js',
   'js/catalogo-padrao.js',
   'js/formulas.js',
   'js/store.js',

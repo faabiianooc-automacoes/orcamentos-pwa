@@ -368,3 +368,15 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; te
 .topo-btn { min-height: 36px; padding: 6px 12px; font-size: 14px; }
 dialog.largo { width: min(640px, calc(100vw - 24px)); }
 dialog .dim-res .lista { box-shadow: none; }
+
+/* Especificação técnica */
+details.tec { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-top: 14px; background: var(--surface-2); }
+details.tec summary { display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; list-style: none; }
+details.tec summary::-webkit-details-marker { display: none; }
+details.tec summary svg { width: 16px; height: 16px; color: var(--primary); }
+details.tec summary .muted { margin-left: auto; font-weight: 400; font-size: 12.5px; }
+.tec-res { margin: 10px 0 0; }
+.tec-res:empty { display: none; }
+.item-tec { font-size: 12.5px; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; margin-bottom: 10px; cursor: pointer; }
+.btn.btn-peq { min-height: 32px; padding: 4px 10px; font-size: 13px; gap: 4px; }
+.btn.btn-peq svg { width: 15px; height: 15px; }

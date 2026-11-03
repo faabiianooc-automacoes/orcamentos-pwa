@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.0] - 2026-11-03
+- Especificação técnica dos materiais (opcional): ao cadastrar ou editar um item do catálogo, escolha o tipo de material e preencha só os campos que se aplicam. Tipos: cabo/condutor, disjuntor, DR, DPS, tomada/interruptor, eletroduto/canaleta, lâmpada/luminária, contator/relé, automação/eletrônico e outro equipamento; todos com marca, modelo, INMETRO e observação.
+- O tipo é sugerido pela descrição (ex.: "Cabo ..." → cabo). A especificação aparece na lista do catálogo e entra na busca (ex.: "curva C", "2,5 mm²").
+- No orçamento, o item copia a especificação do catálogo; o botão Especificação permite ajustar só naquele orçamento.
+- PDF: especificação abaixo da descrição, em letra menor (Ajustes → Padrões permite desligar).
+- Catálogo padrão (v3): especificações nos cabos, disjuntor e tomadas; novos itens Tomada 20 A, DR 30 mA, DPS, cabo 10 mm², cabo PP 3 x 2,5 mm², lâmpada LED, luminária/plafon LED e contator. Itens e preços já cadastrados não mudam.
+- PDF: coluna de unidade mais larga ("ponto" não quebra mais).
+
 ## [1.9.0] - 2026-11-03
 - Dimensionamento (Início → Ferramentas → Dimensionamento): calculadora de circuitos com resultados ao vivo; salvar o circuito em um orçamento.
 - Fórmulas editáveis (Dimensionamento → Fórmulas, ou Ajustes): entradas, cálculos e tabelas no estilo do Excel em português (SE, PROCV, PROXIMO, RAIZ, MAXIMO...), prévia do resultado em cada fórmula, validação antes de salvar, versão do modelo, exportar/importar em .json e voltar ao exemplo. O modelo sincroniza na nuvem e vai no backup.

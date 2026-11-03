@@ -21,7 +21,7 @@
   // Id fixo para itens do catálogo padrão: igual em todos os aparelhos (evita duplicar na nuvem)
   const idPadrao = desc => 'p-' + chaveDesc(desc).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
   // Itens genéricos, SEM preço (ver js/catalogo-padrao.js)
-  const catalogoInicial = () => ordenarCatalogo(CP.itens.map(i => ({ id: idPadrao(i.descricao), valor: 0, ...i })));
+  const catalogoInicial = () => ordenarCatalogo(CP.itens.map(i => ({ id: idPadrao(i.descricao), valor: 0, ...i, ...(i.tec ? { tec: { ...i.tec } } : {}) })));
   const ordemGrupo = g => { const i = GRUPOS.indexOf(g); return i < 0 ? GRUPOS.length : i; };
   function ordenarCatalogo(l) {
     return l.sort((a, b) => ordemGrupo(a.grupo) - ordemGrupo(b.grupo) || a.descricao.localeCompare(b.descricao, 'pt-BR'));
@@ -32,10 +32,12 @@
   function atualizarCatalogo(d) {
     const padrao = new Map(CP.itens.map(i => [chaveDesc(i.descricao), i]));
     d.catalogo.forEach(i => {
-      if (!i.grupo) i.grupo = (padrao.get(chaveDesc(i.descricao)) || {}).grupo || 'Outros';
+      const p = padrao.get(chaveDesc(i.descricao)) || {};
+      if (!i.grupo) i.grupo = p.grupo || 'Outros';
+      if (!i.tec && p.tec) i.tec = { ...p.tec }; // especificação técnica padrão (v3), sem mexer na do usuário
     });
     const existentes = new Set(d.catalogo.map(i => chaveDesc(i.descricao)));
-    CP.itens.forEach(i => { if (!existentes.has(chaveDesc(i.descricao))) d.catalogo.push({ id: idPadrao(i.descricao), valor: 0, ...i }); });
+    CP.itens.forEach(i => { if (!existentes.has(chaveDesc(i.descricao))) d.catalogo.push({ id: idPadrao(i.descricao), valor: 0, ...i, ...(i.tec ? { tec: { ...i.tec } } : {}) }); });
     ordenarCatalogo(d.catalogo);
     d.versaoCatalogo = CP.VERSAO_CATALOGO;
   }
@@ -48,7 +50,7 @@
         nome: '', documento: '', telefone: '', email: '', endereco: '', cidade: '',
         logo: '', corTexto: '#0f766e', corFundo: '#0f766e',
         assinatura: '', assinaturaNome: '', assinarAuto: true, rubricaTexto: '', rubricaEstilo: '',
-        prefixo: 'ORC', validadeDias: 15,
+        prefixo: 'ORC', validadeDias: 15, tecNoPdf: true,
         prazoPadrao: '', pagamentoPadrao: '', garantiaPadrao: '', observacoesPadrao: '',
         mensagemPadrao: 'Olá, {cliente}! Segue o orçamento {numero} no valor de {total}, válido até {validade}. Qualquer dúvida, estou à disposição.\n{empresa}'
       },
