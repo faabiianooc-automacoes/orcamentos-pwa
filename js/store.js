@@ -479,10 +479,69 @@
     const m = modeloDim();
     const r = window.Formulas.linhas(m, entradas);
     return {
-      id: id || uid(), nome: String(nome || '').trim() || 'Circuito', entradas: { ...entradas },
+      id: id || uid(), nome: String(nome || '').trim() || 'Circuito', entradas: { ...entradas }, ligacao: 'auto',
       modelo: { nome: m.nome, versao: m.versao, exemplo: !!m.exemplo, criterios: m.criterios || '' },
       linhas: r.linhas, erros: r.erros.length, calculadoEm: new Date().toISOString()
     };
+  }
+
+  /* ---------- Fases dos circuitos (multifilar) ----------
+     o.alimentacao = { sistema: '127/220' | '220/380', tipo: 'mono' | 'bi' | 'tri', geral: 'A' }
+     c.ligacao = 'auto' | 'F1+N' | 'F2+N' | 'F3+N' | 'F1+F2' | 'F1+F3' | 'F2+F3' | 'F1+F2+F3' | 'F1+F2+F3+N'
+     Todo circuito leva PE (condutor de proteção). */
+  const ALIM_PADRAO = { sistema: '127/220', tipo: 'bi', geral: '' };
+  const alimentacao = o => ({ ...ALIM_PADRAO, ...(o.alimentacao || {}) });
+  const fasesDisponiveis = o => ({ mono: ['F1'], bi: ['F1', 'F2'], tri: ['F1', 'F2', 'F3'] })[alimentacao(o).tipo] || ['F1', 'F2'];
+  function opcoesLigacao(o) {
+    const F = fasesDisponiveis(o), L = F.map(f => f + '+N');
+    if (F.length >= 2) { for (let i = 0; i < F.length; i++) for (let j = i + 1; j < F.length; j++) L.push(F[i] + '+' + F[j]); }
+    if (F.length === 3) L.push('F1+F2+F3', 'F1+F2+F3+N');
+    return L;
+  }
+  // Valor bruto de uma entrada do circuito, procurando pela unidade (W, V) ou pela variável
+  function entradaCircuito(c, unidade, vars) {
+    const l = (c.linhas || []).find(x => x.tipo === 'entrada' && (vars.includes(String(x.var).toLowerCase()) || String(x.unidade).toUpperCase() === unidade));
+    if (!l) return NaN;
+    const v = c.entradas && c.entradas[l.var];
+    return window.Formulas.valorEntrada({ tipo: 'numero' }, v == null ? '' : v);
+  }
+  const potenciaCircuito = c => { const p = entradaCircuito(c, 'W', ['potencia']); return isFinite(p) ? p : 0; };
+
+  /* Distribui os circuitos nas fases, equilibrando a carga.
+     Os definidos à mão ficam como estão; os automáticos entram do maior para o menor,
+     na fase (ou par de fases) menos carregada. */
+  function ligacoes(o) {
+    const al = alimentacao(o), F = fasesDisponiveis(o);
+    const vFN = al.sistema === '220/380' ? 220 : 127, vFF = al.sistema === '220/380' ? 380 : 220;
+    const carga = Object.fromEntries(F.map(f => [f, 0]));
+    const res = {}, avisos = [];
+    const aplicar = (c, fases, neutro, auto) => {
+      const p = potenciaCircuito(c);
+      fases.forEach(f => { carga[f] = (carga[f] || 0) + p / fases.length; });
+      res[c.id] = { fases, neutro, auto, rotulo: fases.join('+') + (neutro ? '+N' : '') + '+PE', tensao: fases.length > 1 ? vFF : vFN };
+    };
+    const circ = o.circuitos || [];
+    circ.filter(c => c.ligacao && c.ligacao !== 'auto').forEach(c => {
+      const partes = c.ligacao.split('+');
+      const fases = partes.filter(x => /^F\d$/.test(x));
+      if (fases.some(f => !F.includes(f))) avisos.push(`${c.nome}: ligação ${c.ligacao} usa fase que a alimentação não tem`);
+      aplicar(c, fases.filter(f => F.includes(f)).length ? fases.filter(f => F.includes(f)) : [F[0]], partes.includes('N'), false);
+    });
+    circ.filter(c => !c.ligacao || c.ligacao === 'auto')
+      .sort((a, b) => potenciaCircuito(b) - potenciaCircuito(a))
+      .forEach(c => {
+        const t = entradaCircuito(c, 'V', ['tensao']);
+        const nf = Number(entradaCircuito(c, '', ['fases'])) === 3 ? 3 : (isFinite(t) && Math.abs(t - vFF) < 1 && vFF !== vFN ? 2 : 1);
+        if (nf > F.length) avisos.push(`${c.nome}: precisa de ${nf} fases, mas a alimentação tem ${F.length}`);
+        const n = Math.min(nf, F.length);
+        if (n === 1) { const f = F.reduce((a, b) => carga[b] < carga[a] ? b : a); aplicar(c, [f], true, true); }
+        else if (n === 2) {
+          let melhor = null;
+          for (let i = 0; i < F.length; i++) for (let j = i + 1; j < F.length; j++) { const s = carga[F[i]] + carga[F[j]]; if (!melhor || s < melhor.s) melhor = { s, p: [F[i], F[j]] }; }
+          aplicar(c, melhor.p, false, true);
+        } else aplicar(c, F.slice(), false, true);
+      });
+    return { porCircuito: res, carga, avisos, alimentacao: al, vFN, vFF };
   }
 
   /* ---------- Backup ---------- */
@@ -513,6 +572,7 @@
     totais, validadeAte, diasEntre, agenda, statusExibido, pendencias,
     salvarItemCatalogo, excluirItemCatalogo, salvarEmpresa,
     modeloDim, salvarModeloDim, restaurarModeloDim, calcularCircuito,
+    alimentacao, fasesDisponiveis, opcoesLigacao, ligacoes, potenciaCircuito,
     exportar, importar, marcarBackup, ultimoBackup, temDados, resetar,
     // nuvem
     set aoAlterar(fn) { aoAlterar = fn || (() => {}); },

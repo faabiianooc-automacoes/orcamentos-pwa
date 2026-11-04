@@ -328,6 +328,11 @@
       </div>
 
       <h2>Dimensionamento</h2>
+      <div class="card" id="alim" style="margin-bottom:10px"><div class="campos">
+        <div class="campo c2 m3"><label for="al-tipo">Alimentação</label><select id="al-tipo" data-al="tipo">${[['mono', 'Monofásica (F+N)'], ['bi', 'Bifásica (2F+N)'], ['tri', 'Trifásica (3F+N)']].map(([v, r]) => `<option value="${v}" ${st.alimentacao(o).tipo === v ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
+        <div class="campo c2 m3"><label for="al-sis">Sistema</label><select id="al-sis" data-al="sistema">${['127/220', '220/380'].map(v => `<option ${st.alimentacao(o).sistema === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+        <div class="campo c2 m3"><label for="al-geral">Disjuntor geral (A)</label><input id="al-geral" data-al="geral" class="num" inputmode="numeric" value="${esc(st.alimentacao(o).geral)}" placeholder="Ex.: 50"></div>
+      </div><p class="ajuda" id="al-carga" style="margin:8px 0 0"></p></div>
       <div id="circ"></div>
       <div class="acoes">
         <button class="btn" id="add-circ" type="button">${ICON.cabo} Adicionar circuito</button>
@@ -338,10 +343,13 @@
       <div id="anx"></div>
       <div class="acoes">
         <button class="btn" id="anx-des" type="button">${ICON.desenho} Novo desenho</button>
+        <label class="btn" style="color:var(--text)">${ICON.desenho} Planta com pontos<input type="file" id="anx-planta" accept="image/*" hidden></label>
+        <button class="btn" id="anx-multi" type="button">${ICON.cabo} Multifilar colorido</button>
         <button class="btn" id="anx-uni" type="button">${ICON.cabo} Unifilar automático</button>
         <label class="btn" style="color:var(--text)">${ICON.clipe} Arquivo<input type="file" id="anx-arq" multiple accept=".pdf,.dwg,.dxf,.drawio,.zip,image/*,application/pdf" hidden></label>
         <button class="btn" id="anx-link" type="button">${ICON.link} Link</button>
       </div>
+      <p class="ajuda"><b>Planta com pontos:</b> escolha a foto ou imagem da planta do cômodo; ela abre como fundo travado e você marca tomadas, interruptores e pontos de luz com a biblioteca <b>simbolos-planta</b> (<a href="drawio/simbolos-planta.xml" download>baixar biblioteca</a>).</p>
       <p class="ajuda">Desenhos no editor draw.io (precisa de internet), arquivos de outros programas (PDF, DWG, DXF, fotos) e links (ex.: Tinkercad). Os marcados com "Entregar" vão para o cliente na entrega da obra. Os arquivos ficam guardados neste aparelho.</p>
 
       <h2>Valores</h2>
@@ -398,18 +406,28 @@
       const L = o.circuitos || [];
       app.querySelector('#dim-pdf-l').hidden = !L.length;
       app.querySelector('#anx-uni').hidden = !L.length;
+      app.querySelector('#anx-multi').hidden = !L.length;
+      app.querySelector('#alim').hidden = !L.length;
+      const LG = st.ligacoes(o);
+      const tot = Object.values(LG.carga).reduce((a, b) => a + b, 0);
+      app.querySelector('#al-carga').innerHTML = L.length ? `<b>Carga por fase:</b> ${Object.entries(LG.carga).map(([f, w]) => `${f} ${Math.round(w).toLocaleString('pt-BR')} W${tot ? ` (${Math.round(w / tot * 100)}%)` : ''}`).join(' · ')}${LG.avisos.length ? `<br><span style="color:var(--danger)">${LG.avisos.map(esc).join('<br>')}</span>` : ''}` : '';
       app.querySelector('#circ').innerHTML = L.length ? `<div class="lista">${L.map((c, i) => {
         const calc = (c.linhas || []).filter(l => l.tipo === 'calculo' && !l.erro);
         const res = [...calc.filter(l => l.destaque), ...calc.filter(l => l.resumo && !l.destaque)].slice(0, 3).map(l => `${l.rotulo}: ${l.valor}${l.unidade ? ' ' + l.unidade : ''}`).join(' · ');
         return `<button class="linha" type="button" data-circ="${i}"><span class="ag-ic ${c.erros ? 'perigo' : c.modelo && c.modelo.exemplo ? 'alerta' : 'ok'}">${ICON.cabo}</span>
-          <div class="principal"><div class="t1">${esc(c.nome)}</div><div class="t2">${esc(res || (c.erros ? 'Cálculo com erro' : ''))}</div></div>
+          <div class="principal"><div class="t1">${esc(c.nome)}</div><div class="t2"><span class="lig">${esc((LG.porCircuito[c.id] || {}).rotulo || '')}${c.ligacao && c.ligacao !== 'auto' ? '' : ' · auto'}</span> ${esc(res || (c.erros ? 'Cálculo com erro' : ''))}</div></div>
           ${c.erros ? '<span class="badge b-recusado">erro</span>' : c.modelo && c.modelo.exemplo ? '<span class="badge b-vencido">exemplo</span>' : ''}</button>`;
       }).join('')}</div>` : `<p class="ajuda" style="margin:0">Opcional: calcule os cabos e disjuntores dos circuitos (NBR 5410) e envie junto com o orçamento ou em arquivo separado para o "de acordo" do cliente.</p>`;
     }
+    app.querySelector('#alim').addEventListener('change', ev => {
+      const k = ev.target.dataset.al; if (!k) return;
+      o.alimentacao = { ...st.alimentacao(o), [k]: ev.target.value.trim() };
+      desenharCircuitos(); agendarSalvar();
+    });
     app.querySelector('#circ').addEventListener('click', async ev => {
       const b = ev.target.closest('[data-circ]'); if (!b) return;
       const i = Number(b.dataset.circ);
-      const r = await dialogoCircuito(o.circuitos[i], i + 1);
+      const r = await dialogoCircuito(o.circuitos[i], i + 1, o);
       if (!r) return;
       if (r === 'excluir') { if (!(await confirmar('Excluir circuito', `Excluir "${esc(o.circuitos[i].nome)}"?`, 'Excluir'))) return; o.circuitos.splice(i, 1); }
       else o.circuitos[i] = r;
@@ -417,7 +435,7 @@
     });
     app.querySelector('#add-circ').onclick = async () => {
       o.circuitos = o.circuitos || [];
-      const r = await dialogoCircuito(null, o.circuitos.length + 1);
+      const r = await dialogoCircuito(null, o.circuitos.length + 1, o);
       if (!r || r === 'excluir') return;
       o.circuitos.push(r); desenharCircuitos(); agendarSalvar();
     };
@@ -455,6 +473,16 @@
     app.querySelector('#anx-des').onclick = async () => {
       const nome = await pedirTexto('Novo desenho', 'Nome do desenho', `Desenho ${(o.anexos || []).filter(a => a.tipo === 'desenho').length + 1}`);
       if (nome) editarDesenho({ xml: '' }, nome);
+    };
+    app.querySelector('#anx-planta').addEventListener('change', async ev => {
+      const f = ev.target.files[0]; ev.target.value = ''; if (!f) return;
+      if (!/^image\//.test(f.type)) { toast('Escolha uma imagem (foto ou print da planta). Para PDF, exporte a página como imagem.'); return; }
+      const nome = await pedirTexto('Planta com pontos', 'Nome do desenho', 'Planta - ' + (o.titulo || 'pontos elétricos'));
+      if (nome) editarDesenho({ xml: await A.plantaXml(f, nome) }, nome);
+    });
+    app.querySelector('#anx-multi').onclick = () => {
+      if (!(o.circuitos || []).length) { toast('Adicione circuitos no dimensionamento primeiro.'); return; }
+      editarDesenho({ xml: A.gerarMultifilarXml(o) }, 'Diagrama multifilar');
     };
     app.querySelector('#anx-uni').onclick = () => {
       if (!(o.circuitos || []).length) { toast('Adicione circuitos no dimensionamento primeiro.'); return; }
@@ -939,8 +967,10 @@
   }
 
   /* Diálogo de circuito dentro do orçamento (novo ou edição). Retorna o circuito, 'excluir' ou null. */
-  async function dialogoCircuito(circ, n) {
+  async function dialogoCircuito(circ, n, orc) {
     const m = st.modeloDim();
+    let ligacao = circ && circ.ligacao ? circ.ligacao : 'auto';
+    const opLig = orc ? st.opcoesLigacao(orc) : [];
     const entradas = { ...(circ ? circ.entradas : {}) };
     let nome = circ ? circ.nome : `Circuito ${n}`;
     const mudouModelo = circ && circ.modelo && (circ.modelo.versao !== m.versao || circ.modelo.nome !== m.nome);
@@ -948,18 +978,24 @@
       titulo: circ ? 'Editar circuito' : 'Novo circuito',
       corpo: `${m.exemplo ? '<p class="ajuda" style="margin-top:0;color:var(--warn)"><b>Fórmulas de exemplo (fictícias).</b></p>' : ''}
         ${mudouModelo ? `<p class="ajuda" style="margin-top:0">Calculado com a versão ${esc(circ.modelo.versao)}. Ao salvar, será recalculado com as fórmulas atuais (versão ${esc(m.versao)}).</p>` : ''}
-        <div class="campo" style="margin-bottom:12px"><label for="dc-nome">Nome do circuito</label><input id="dc-nome" value="${esc(nome)}"></div>
+        <div class="campos" style="margin-bottom:12px">
+          <div class="campo ${orc ? 'c4' : ''}"><label for="dc-nome">Nome do circuito</label><input id="dc-nome" value="${esc(nome)}"></div>
+          ${orc ? `<div class="campo c2"><label for="dc-lig">Ligação (fases)</label><select id="dc-lig"><option value="auto">Automática</option>${[...new Set([...opLig, ...(ligacao !== 'auto' && !opLig.includes(ligacao) ? [ligacao] : [])])].map(v => `<option ${v === ligacao ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="ajuda">Automática equilibra as fases; PE sempre incluso.</span></div>` : ''}
+        </div>
         <div id="dc-calc"></div>`,
       acoes: [...(circ ? [{ rotulo: 'Excluir', classe: 'perigo', valor: 'excluir' }] : []), { rotulo: 'Cancelar', valor: null }, { rotulo: 'Salvar', classe: 'prim', valor: 'ok' }],
       aoAbrir: d => {
         d.classList.add('largo');
         formCalculo(d.querySelector('#dc-calc'), m, entradas);
         d.querySelector('#dc-nome').addEventListener('input', e => { nome = e.target.value; });
+        const sl = d.querySelector('#dc-lig'); if (sl) sl.addEventListener('change', e => { ligacao = e.target.value; });
       }
     });
     if (r === 'excluir') return 'excluir';
     if (r !== 'ok') return null;
-    return st.calcularCircuito(nome, entradas, circ && circ.id);
+    const novo = st.calcularCircuito(nome, entradas, circ && circ.id);
+    novo.ligacao = ligacao;
+    return novo;
   }
 
   /* ---------- Editor de fórmulas ---------- */
@@ -1027,6 +1063,8 @@
         <p class="ajuda">Igual ao Excel em português: argumentos separados por <b>;</b> e decimais com vírgula. Use os nomes das variáveis (entradas e cálculos anteriores). Os cálculos são feitos na ordem da lista.</p>
         <div class="lista">${F.AJUDA.map(([f, ex]) => `<div class="linha"><div class="principal"><div class="t1 mono" style="white-space:normal">${esc(f)}</div><div class="t2" style="white-space:normal">${esc(ex)}</div></div></div>`).join('')}</div>
       </details>
+      <h2>Planilha de referência</h2>
+      <div class="card" id="fm-plan"></div>
       <h2>Entradas</h2><div id="fm-entradas"></div>
       <div class="acoes"><button class="btn" data-add="entradas">${ICON.mais} Entrada</button></div>
       <h2>Cálculos</h2><p class="ajuda" style="margin-top:-4px">Abaixo de cada fórmula aparece o resultado com os valores padrão das entradas.</p><div id="fm-calculos"></div>
@@ -1038,6 +1076,39 @@
         <button class="btn" id="fm-desc">Descartar</button>
         <button class="btn prim" id="fm-salvar">Salvar</button>
       </div></div>`;
+
+    /* Planilha Excel de dimensionamento: guardada neste aparelho (IndexedDB) como referência */
+    const ID_PLAN = 'planilha-dimensionamento';
+    function desenharPlanilha() {
+      const pl = st.db.empresa.planilhaDim;
+      app.querySelector('#fm-plan').innerHTML = `
+        ${pl ? `<div class="row" style="gap:12px;margin-bottom:10px"><span class="ag-ic ok">${ICON.doc}</span><div style="flex:1;min-width:0"><div class="t1" style="font-weight:600;overflow-wrap:anywhere">${esc(pl.nome)}</div>
+          <div class="ajuda" style="margin:0">${esc(window.Arquivos.tamanhoFmt(pl.tamanho))} · anexada em ${esc(st.dataBR(pl.em))}</div></div></div>` : '<p class="ajuda" style="margin-top:0">Nenhuma planilha anexada.</p>'}
+        <div class="acoes" style="margin-top:0">
+          <label class="btn ${pl ? '' : 'prim'}" style="${pl ? 'color:var(--text)' : ''}">${ICON.clipe} ${pl ? 'Trocar planilha' : 'Anexar planilha (.xlsx)'}<input type="file" id="fm-plan-arq" accept=".xlsx,.xlsm,.xls,.ods,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden></label>
+          ${pl ? `<button class="btn" type="button" id="fm-plan-abrir">${ICON.backup} Baixar</button><button class="btn perigo" type="button" id="fm-plan-rem">${ICON.lixo} Remover</button>` : ''}
+        </div>
+        <p class="ajuda">A planilha fica guardada neste aparelho como referência das fórmulas (não vai para a nuvem nem para o backup). As fórmulas usadas nos cálculos são as desta tela.</p>`;
+    }
+    app.querySelector('#fm-plan').addEventListener('change', async ev => {
+      if (ev.target.id !== 'fm-plan-arq') return;
+      const f = ev.target.files[0]; ev.target.value = ''; if (!f) return;
+      if (f.size > 25 * 1048576) { toast('Planilha maior que 25 MB.'); return; }
+      try { await window.Arquivos.salvar(ID_PLAN, f); } catch (e) { toast('Não foi possível guardar: armazenamento cheio.'); return; }
+      st.salvarEmpresa({ planilhaDim: { nome: f.name, tamanho: f.size, em: st.hoje() } });
+      toast('Planilha anexada.'); desenharPlanilha();
+    });
+    app.querySelector('#fm-plan').addEventListener('click', async ev => {
+      if (ev.target.closest('#fm-plan-abrir')) {
+        const b = await window.Arquivos.obter(ID_PLAN);
+        if (!b) { toast('A planilha não está neste aparelho (foi anexada em outro).'); return; }
+        window.WhatsApp.baixar(b, st.db.empresa.planilhaDim.nome);
+      }
+      if (ev.target.closest('#fm-plan-rem') && await confirmar('Remover planilha', 'Remover a planilha anexada? As fórmulas desta tela não mudam.', 'Remover')) {
+        await window.Arquivos.excluir(ID_PLAN); st.salvarEmpresa({ planilhaDim: null }); desenharPlanilha();
+      }
+    });
+    desenharPlanilha();
 
     const secs = { entradas: htmlEntradas, calculos: htmlCalculos, tabelas: htmlTabelas };
     const desenharSec = sec => { app.querySelector('#fm-' + sec).innerHTML = secs[sec](); };
@@ -1634,7 +1705,7 @@
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.11.0</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.12.0</p>`;
 
     // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {

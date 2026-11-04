@@ -51,7 +51,9 @@
       camada.className = 'drawio-camada';
       const ifr = document.createElement('iframe');
       ifr.title = 'Editor de desenho';
-      ifr.src = `${ORIGEM}/?embed=1&proto=json&spin=1&libraries=1&saveAndExit=1&noSaveBtn=1&lang=pt`;
+      // Biblioteca própria de símbolos de planta (drawio/simbolos-planta.xml), servida pelo próprio app
+      const lib = new URL('drawio/simbolos-planta.xml', location.href).href;
+      ifr.src = `${ORIGEM}/?embed=1&proto=json&spin=1&libraries=1&saveAndExit=1&noSaveBtn=1&lang=pt&clibs=U${encodeURIComponent(lib)}`;
       camada.appendChild(ifr);
       document.body.appendChild(camada);
       document.body.classList.add('sem-rolagem');
@@ -126,7 +128,9 @@
       const sc = valorDe(c, ['secao', 'secao_adotada', 's'], 'secao adotada', 'mm') || valorDe(c, [], 'secao', 'mm');
       const pot = valorDe(c, ['potencia', 'p'], 'potencia', 'w');
       const ib = valorDe(c, ['ib', 'corrente'], 'corrente de projeto', 'a');
+      const lg = window.Store && window.Store.ligacoes ? (window.Store.ligacoes(o).porCircuito[c.id] || {}).rotulo : '';
       const b = V(`${i + 1}\n${dj ? dj.v + ' A' : '? A'}`, cx - 32, busY + 60, 64, 48, disj);
+      if (lg) V(lg, cx - 65, busY + 112, 130, 16, 'text;html=1;fontSize=9;align=center;fontColor=#5a6470;');
       E(bus, b, '', `exitX=${((cx - busX) / busW).toFixed(4)};exitY=1;entryX=0.5;entryY=0;`);
       const carga = V(`${c.nome}${pot ? '\n' + txt(pot) : ''}`, cx - 65, busY + 190, 130, 50, caixa);
       E(b, carga, sc ? txt(sc) : '');
@@ -140,5 +144,152 @@
     return `<mxGraphModel dx="800" dy="600" grid="1" gridSize="10" page="1" pageScale="1" pageWidth="827" pageHeight="1169"><root><mxCell id="0"/><mxCell id="1" parent="0"/>${cel.join('')}</root></mxGraphModel>`;
   }
 
-  window.Arquivos = { salvar, obter, excluir, abrirDrawio, gerarUnifilarXml, tamanhoFmt, paraDataUrl, deDataUrl, ehImagem };
+
+  /* ---------- Multifilar colorido (boas práticas NBR 5410) ----------
+     Entrada → disjuntor geral (polos = nº de fases) → DPS (fases e neutro para o PE)
+     → IDR geral (fases + neutro) → barramentos de fase, neutro (após o IDR) e terra.
+     Cada circuito: disjuntor com um polo por fase; neutro do barramento de neutro;
+     PE do barramento de terra em todos os circuitos. Bolinha = ligação; sem bolinha = cruzamento. */
+  const CORES = { PE: '#2e9e3e', N: '#1565c0', F1: '#d71920', F2: '#111111', F3: '#ffffff' };
+  const NOMES = { PE: 'Terra (PE)', N: 'Neutro', F1: 'Fase 1', F2: 'Fase 2', F3: 'Fase 3' };
+  const FUNDO = '#d9dde1', CONTORNO = '#4a4f55';
+
+  function gerarMultifilarXml(o) {
+    const st = window.Store;
+    const lig = st.ligacoes(o), al = lig.alimentacao, F = st.fasesDisponiveis(o);
+    const circ = o.circuitos || [];
+    const tecDe = classe => (o.itens || []).map(i => i.tec).find(t => t && t.classe === classe);
+    const dr = tecDe('dr') || {}, dps = tecDe('dps') || {};
+    const fios = [], pecas = [], topo = [];
+    let id = 2;
+    const nid = () => 'm' + id++;
+    // Fio: lista de pontos [[x,y],...]; branco ganha contorno escuro por baixo
+    function fio(cond, pts, seta, extra) {
+      const cor = CORES[cond];
+      const geo = (w, c) => `<mxCell id="${nid()}" value="" style="endArrow=${seta ? 'block;endFill=1;endSize=7' : 'none'};html=1;rounded=0;strokeWidth=${w};strokeColor=${c};${extra || ''}" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="${pts[0][0]}" y="${pts[0][1]}" as="sourcePoint"/><mxPoint x="${pts[pts.length - 1][0]}" y="${pts[pts.length - 1][1]}" as="targetPoint"/>${pts.length > 2 ? `<Array as="points">${pts.slice(1, -1).map(q => `<mxPoint x="${q[0]}" y="${q[1]}"/>`).join('')}</Array>` : ''}</mxGeometry></mxCell>`;
+      if (cond === 'F3') fios.push(geo(5, CONTORNO));
+      fios.push(geo(3, cor));
+    }
+    const V = (lista, valor, x, y, w, h, estilo) => { lista.push(`<mxCell id="${nid()}" value="${xe(valor)}" style="${estilo}" vertex="1" parent="1"><mxGeometry x="${x}" y="${y}" width="${w}" height="${h}" as="geometry"/></mxCell>`); };
+    const ponto = (cond, x, y) => V(topo, '', x - 4.5, y - 4.5, 9, 9, `ellipse;shape=ellipse;perimeter=ellipsePerimeter;html=1;fillColor=${CORES[cond]};strokeColor=${cond === 'F3' ? CONTORNO : CORES[cond]};strokeWidth=1;`);
+    const caixa = 'rounded=1;whiteSpace=wrap;html=1;fillColor=#f7f7f7;strokeColor=#333333;strokeWidth=1.5;fontSize=11;fontColor=#142029;';
+    const etiqueta = c => `rounded=1;whiteSpace=wrap;html=1;fontStyle=1;fontSize=13;strokeColor=${c === 'F3' ? CONTORNO : 'none'};fillColor=${CORES[c]};fontColor=${c === 'F3' ? '#142029' : '#ffffff'};`;
+    const texto = (tam, extra) => `text;html=1;fillColor=none;strokeColor=none;align=left;verticalAlign=middle;fontSize=${tam};fontColor=#142029;${extra || ''}`;
+
+    // Colunas dos condutores de entrada
+    const X = { PE: 60, N: 110 };
+    F.forEach((f, i) => { X[f] = 170 + i * 30; });
+    const xUltF = X[F[F.length - 1]];
+    const yIni = 44;
+
+    // Etiquetas de entrada
+    ['PE', 'N', ...F].forEach(c => V(pecas, c === 'PE' ? 'T' : c, X[c] - 14, 8, 28, 26, etiqueta(c)));
+
+    // Disjuntor geral (só fases)
+    const yDG = 70, hDG = 56;
+    // DPS
+    const yTap = 150, yDPS = 172, hDPS = 44;
+    const dpsConds = [...F, 'N'];
+    const xDPS0 = xUltF + 90;
+    const xDPS = c => xDPS0 + dpsConds.indexOf(c) * 22;
+    // IDR (fases + neutro)
+    const yIDR = 250, hIDR = 70;
+    // Barramentos
+    const yFase = f => 362 + F.indexOf(f) * 16;
+    const yN = 610, yPE = 630, yFim = 720;
+    const xC0 = Math.max(xDPS(dpsConds[dpsConds.length - 1]) + 70, xUltF + 120);
+    const COL = 150;
+    const xFimBarras = xC0 + Math.max(circ.length, 1) * COL - 30;
+
+    // Condutores de entrada até os barramentos
+    F.forEach(f => {
+      fio(f, [[X[f], yIni], [X[f], yFase(f)], [xFimBarras, yFase(f)]]);
+      // derivação para o DPS
+      fio(f, [[X[f], yTap], [xDPS(f), yTap], [xDPS(f), yDPS]], false, 'jumpStyle=arc;jumpSize=8;');
+      ponto(f, X[f], yTap);
+    });
+    fio('N', [[X.N, yIni], [X.N, yN], [xFimBarras, yN]]);
+    fio('N', [[X.N, yTap - 12], [xDPS('N'), yTap - 12], [xDPS('N'), yDPS]], false, 'jumpStyle=arc;jumpSize=8;');
+    ponto('N', X.N, yTap - 12);
+    fio('PE', [[X.PE, yIni], [X.PE, yPE], [xFimBarras, yPE]]);
+    // DPS → PE (barramento de terra)
+    const yDpsPE = yDPS + hDPS + 18, xDpsPE = xDPS(dpsConds[dpsConds.length - 1]) + 26;
+    dpsConds.forEach(c => fio('PE', [[xDPS(c), yDPS + hDPS], [xDPS(c), yDpsPE], [xDpsPE, yDpsPE]]));
+    fio('PE', [[xDpsPE, yDpsPE], [xDpsPE, yPE]]);
+    ponto('PE', xDpsPE, yPE);
+
+    // Peças do quadro
+    V(pecas, '', X[F[0]] - 15, yDG, xUltF - X[F[0]] + 30, hDG, caixa);
+    V(pecas, `<b>Disjuntor geral</b><br>${F.length}P ${al.geral ? xe(al.geral) + ' A' : '___ A'}`, xUltF + 22, yDG + 8, 120, 40, texto(11));
+    V(pecas, '', X.N - 15, yIDR, xUltF - X.N + 30, hIDR, caixa);
+    V(pecas, `<b>IDR</b><br>${F.length + 1}P ${dr.in ? xe(dr.in) + ' A' : '__ A'} · ${xe(dr.idn || '30')} mA${dr.tipo_dr ? ' · tipo ' + xe(dr.tipo_dr) : ''}`, xUltF + 22, yIDR + 14, 220, 40, texto(11));
+    V(pecas, '', xDPS0 - 12, yDPS, (dpsConds.length - 1) * 22 + 24, hDPS, caixa + 'fillColor=#fff4e5;');
+    V(pecas, `<b>DPS</b> classe ${xe(dps.classe_dps || 'II')}<br>${dps.uc ? xe(dps.uc) + ' V' : 'Uc ___ V'}${dps.imax ? ' · ' + xe(dps.imax) + ' kA' : ''}`, xDpsPE + 10, yDPS - 2, 140, 40, texto(11));
+    V(pecas, '<b>Barramento de neutro</b> (após o IDR)', X.N + 8, yN - 22, 240, 18, texto(10.5));
+    V(pecas, '<b>Barramento de terra (PE)</b>', X.PE + 8, yPE + 4, 220, 18, texto(10.5));
+    // Polos desenhados dentro das caixas
+    F.forEach(f => V(pecas, '', X[f] - 6, yDG + 14, 12, 28, 'rounded=0;html=1;fillColor=#2b2f33;strokeColor=none;'));
+    [...F, 'N'].forEach(c => V(pecas, '', X[c] - 6, yIDR + 22, 12, 28, `rounded=0;html=1;fillColor=${c === 'N' ? CORES.N : '#2b2f33'};strokeColor=none;`));
+    V(pecas, 'T', xUltF - 2, yIDR + 4, 16, 16, 'ellipse;shape=ellipse;perimeter=ellipsePerimeter;html=1;fontSize=9;fontStyle=1;fillColor=#ffffff;strokeColor=#333333;');
+
+    // Circuitos
+    circ.forEach((c, i) => {
+      const L = lig.porCircuito[c.id] || { fases: [F[0]], neutro: true, rotulo: F[0] + '+N+PE', tensao: lig.vFN };
+      const n = L.fases.length;
+      const cx = xC0 + i * COL;
+      const pxs = L.fases.map((f, k) => cx + k * 22);
+      const yB = 440, hB = 60;
+      L.fases.forEach((f, k) => {
+        fio(f, [[pxs[k], yFase(f)], [pxs[k], yB]]);
+        ponto(f, pxs[k], yFase(f));
+        fio(f, [[pxs[k], yB + hB], [pxs[k], yFim]], true);
+      });
+      let xx = pxs[n - 1] + 22;
+      if (L.neutro) { fio('N', [[xx, yN], [xx, yFim]], true); ponto('N', xx, yN); xx += 22; }
+      fio('PE', [[xx, yPE], [xx, yFim]], true); ponto('PE', xx, yPE);
+      const dj = valorDe(c, ['disjuntor', 'in', 'protecao'], 'disjuntor', 'a');
+      const sc = valorDe(c, ['secao', 'secao_adotada', 's'], 'secao adotada', 'mm') || valorDe(c, [], 'secao', 'mm');
+      V(pecas, '', cx - 14, yB, (n - 1) * 22 + 28, hB, caixa);
+      L.fases.forEach((f, k) => V(pecas, '', pxs[k] - 5, yB + 16, 10, 26, 'rounded=0;html=1;fillColor=#2b2f33;strokeColor=none;'));
+      V(pecas, `${dj ? xe(dj.v) + ' A' : '? A'}`, cx - 68, yB + 20, 50, 18, texto(10.5, 'fontStyle=1;align=right;'));
+      V(pecas, `<b>C${i + 1} - ${he(c.nome)}</b><br>${L.tensao} V · ${he(L.rotulo)}<br>${sc ? he(sc.v + ' ' + sc.u) : '? mm²'}${dj ? ' · ' + he(dj.v) + ' A' : ''}`,
+        cx - 16, yFim + 12, COL - 14, 58, 'rounded=1;whiteSpace=wrap;html=1;fillColor=#f7f7f7;strokeColor=#888888;fontSize=10.5;fontColor=#142029;align=center;verticalAlign=middle;');
+    });
+    if (!circ.length) V(pecas, 'Nenhum circuito no dimensionamento.', xC0, 460, 240, 30, texto(12));
+
+    // Título, legenda e equilíbrio de fases
+    const xT = xC0;
+    V(pecas, '<b>DIAGRAMA MULTIFILAR - QUADRO DE DISTRIBUIÇÃO</b>', xT, 6, 460, 22, texto(15));
+    V(pecas, `Alimentação ${({ mono: 'monofásica', bi: 'bifásica', tri: 'trifásica' })[al.tipo]} · ${al.sistema} V · Esquema TN-S`, xT, 28, 460, 16, texto(11));
+    const conds = ['PE', 'N', ...F];
+    conds.forEach((cnd, k) => {
+      const lx = xT + k * 92, ly = 60;
+      if (cnd === 'F3') V(pecas, '', lx, ly + 5, 26, 6, `rounded=0;html=1;fillColor=${CORES.F3};strokeColor=${CONTORNO};`);
+      else V(pecas, '', lx, ly + 5, 26, 6, `rounded=0;html=1;fillColor=${CORES[cnd]};strokeColor=none;`);
+      V(pecas, NOMES[cnd], lx + 30, ly, 62, 16, texto(10));
+    });
+    const totalW = Object.values(lig.carga).reduce((a, b) => a + b, 0) || 1;
+    V(pecas, '<b>Carga por fase:</b> ' + F.map(f => `${f} ${Math.round(lig.carga[f]).toLocaleString('pt-BR')} W (${Math.round(lig.carga[f] / totalW * 100)}%)`).join(' · '), xT, 84, 520, 16, texto(10.5));
+    V(pecas, 'Gerado pelo app a partir do dimensionamento. Revise antes de entregar. Bolinha = ligação; linhas sem bolinha apenas se cruzam.', xT, 102, 470, 28, texto(9.5, 'fontColor=#5a6470;whiteSpace=wrap;verticalAlign=top;'));
+    if (lig.avisos.length) V(pecas, '<b>Atenção:</b> ' + lig.avisos.map(he).join('; '), xT, 132, 470, 30, texto(10, 'fontColor=#b42318;whiteSpace=wrap;verticalAlign=top;'));
+
+    return `<mxGraphModel dx="1000" dy="800" grid="0" gridSize="10" page="1" pageScale="1" pageWidth="${Math.max(1169, xFimBarras + 80)}" pageHeight="827" background="${FUNDO}"><root><mxCell id="0"/><mxCell id="1" parent="0"/>${fios.join('')}${pecas.join('')}${topo.join('')}</root></mxGraphModel>`;
+  }
+
+  /* Planta do cômodo como fundo travado, para marcar os pontos por cima */
+  async function plantaXml(arquivo, titulo) {
+    const url = await paraDataUrl(arquivo);
+    const dim = await new Promise(ok => { const im = new Image(); im.onload = () => ok([im.naturalWidth, im.naturalHeight]); im.onerror = () => ok([1000, 700]); im.src = url; });
+    const esc = 1000 / Math.max(dim[0], 1);
+    const w = Math.round(dim[0] * esc), h = Math.round(dim[1] * esc);
+    // No estilo do draw.io a imagem vai como data:image/png,BASE64 (sem ";base64", que conflita com ";")
+    const img = url.replace(';base64', '');
+    return `<mxGraphModel grid="1" gridSize="10" page="1" pageWidth="${w + 40}" pageHeight="${h + 120}"><root><mxCell id="0"/><mxCell id="1" parent="0"/>`
+      + `<mxCell id="pl" value="" style="shape=image;html=1;imageAspect=0;aspect=fixed;locked=1;movable=0;resizable=0;deletable=0;editable=0;image=${xe(img)};" vertex="1" parent="1"><mxGeometry x="20" y="70" width="${w}" height="${h}" as="geometry"/></mxCell>`
+      + `<mxCell id="tt" value="${xe(titulo)}" style="text;html=1;fontSize=16;fontStyle=1;align=left;fillColor=none;strokeColor=none;" vertex="1" parent="1"><mxGeometry x="20" y="20" width="${w}" height="28" as="geometry"/></mxCell>`
+      + `<mxCell id="ti" value="Use a biblioteca &quot;simbolos-planta&quot; (lado esquerdo) para marcar tomadas, interruptores e pontos de luz." style="text;html=1;fontSize=10;align=left;fontColor=#5a6470;fillColor=none;strokeColor=none;" vertex="1" parent="1"><mxGeometry x="20" y="44" width="${w}" height="18" as="geometry"/></mxCell>`
+      + `</root></mxGraphModel>`;
+  }
+
+  window.Arquivos = { salvar, obter, excluir, abrirDrawio, gerarUnifilarXml, gerarMultifilarXml, plantaXml, CORES, tamanhoFmt, paraDataUrl, deDataUrl, ehImagem };
 })();

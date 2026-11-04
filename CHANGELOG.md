@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.12.0] - 2026-11-04
+- Alimentação do quadro no orçamento (mono, bi ou trifásica; 127/220 ou 220/380 V; disjuntor geral).
+- Ligação de cada circuito (F1+N, F1+F2, F1+F2+F3...): automática, equilibrando a carga entre as fases, ou escolhida à mão. Mostra a carga por fase e avisa ligações incompatíveis com a alimentação.
+- Multifilar colorido automático (draw.io): entrada, disjuntor geral (um polo por fase), DPS ligado ao PE, IDR geral (fases + neutro), barramento de neutro após o IDR, barramento de terra e, em cada circuito, disjuntor com um polo por fase, neutro (quando houver) e PE em todos. Cores: terra verde, neutro azul, F1 vermelho, F2 preto, F3 branco (com contorno); fundo cinza. Bolinha marca ligação; sem bolinha é cruzamento.
+- Biblioteca de símbolos de planta carregada no draw.io (33 símbolos): pontos de luz, interruptores (simples, 2 seções, paralelo, intermediário), tomadas baixa/média/alta/20 A/dupla/piso, força, chuveiro, motor, sensores, automação, quadro, medidor, caixa de passagem, eletrodutos, condutores coloridos e legenda. Arquivo: drawio/simbolos-planta.xml (gerado por ferramentas/gerar-biblioteca.py).
+- "Planta com pontos": abre a foto/imagem da planta do cômodo como fundo travado para marcar os pontos com a biblioteca.
+- Unifilar mostra a ligação de cada circuito.
+- Fórmulas: anexar a planilha Excel de dimensionamento como referência (fica no aparelho).
+
 ## [1.11.0] - 2026-11-04
 - Orçamento: seção "Desenhos e anexos".
   - Novo desenho no editor draw.io (diagrams.net) integrado ao app, com biblioteca de símbolos elétricos; gratuito, sem chave de API; precisa de internet. O desenho volta para o app e pode ser reaberto para editar.
