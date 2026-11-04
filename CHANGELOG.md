@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.11.0] - 2026-11-04
+- Orçamento: seção "Desenhos e anexos".
+  - Novo desenho no editor draw.io (diagrams.net) integrado ao app, com biblioteca de símbolos elétricos; gratuito, sem chave de API; precisa de internet. O desenho volta para o app e pode ser reaberto para editar.
+  - Unifilar automático: gera, a partir do dimensionamento, o diagrama do quadro (entrada, disjuntor geral, DR e DPS do orçamento, barramento, disjuntor e seção de cada circuito) e o quadro de cargas, já aberto no draw.io para revisar.
+  - Arquivos de outros programas (PDF, DWG, DXF, fotos; até 25 MB cada) e links (ex.: projeto no Tinkercad).
+  - Cada anexo tem a opção "Entregar".
+- Entrega da obra (menu do orçamento, e oferecida ao mudar o status para Concluído): termo de entrega em PDF com serviços e materiais (sem valores), garantia, lista de documentos, campo "Recebido pelo cliente", dimensionamento, desenhos e fotos; os demais arquivos vão junto e os links vão na mensagem do WhatsApp.
+- Os arquivos dos anexos ficam guardados no aparelho (não vão para a nuvem nem para o backup).
+
 ## [1.10.0] - 2026-11-03
 - Especificação técnica dos materiais (opcional): ao cadastrar ou editar um item do catálogo, escolha o tipo de material e preencha só os campos que se aplicam. Tipos: cabo/condutor, disjuntor, DR, DPS, tomada/interruptor, eletroduto/canaleta, lâmpada/luminária, contator/relé, automação/eletrônico e outro equipamento; todos com marca, modelo, INMETRO e observação.
 - O tipo é sugerido pela descrição (ex.: "Cabo ..." → cabo). A especificação aparece na lista do catálogo e entra na busca (ex.: "curva C", "2,5 mm²").

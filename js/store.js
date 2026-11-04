@@ -334,7 +334,8 @@
       atualizadoEm: new Date().toISOString(),
       enviadoEm: '',
       circuitos: [],     // dimensionamento (ver js/formulas.js)
-      dimNoPdf: true     // incluir o dimensionamento no PDF do orçamento
+      dimNoPdf: true,    // incluir o dimensionamento no PDF do orçamento
+      anexos: []         // desenhos, arquivos e links (ver js/arquivos.js)
     };
     db.orcamentos.unshift(o);
     salvar(); marcar('orcamentos', o.id); marcar('meta', 'contador');
@@ -359,11 +360,14 @@
     });
     n.itens = n.itens.map(i => ({ ...i, id: uid() }));
     n.circuitos = (n.circuitos || []).map(c => ({ ...c, id: uid() }));
+    n.anexos = []; n.entregueEm = ''; n.concluidoEm = ''; n.memorialEnviadoEm = '';
     salvarOrcamento(n);
     return n;
   }
 
   function excluirOrcamento(id) {
+    const o = orcamento(id);
+    if (o && window.Arquivos) (o.anexos || []).forEach(a => window.Arquivos.excluir(a.id));
     db.orcamentos = db.orcamentos.filter(o => o.id !== id);
     salvar(); marcarExclusao('orcamentos', id);
   }

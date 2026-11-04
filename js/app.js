@@ -31,7 +31,11 @@
     agenda: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
     filtro: '<svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>',
     seta: '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>',
-    cabo: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>'
+    cabo: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
+    desenho: '<svg viewBox="0 0 24 24"><path d="M3 21l3.5-1 11-11-2.5-2.5-11 11zM14.5 5.5l2.5 2.5M17 3l4 4"/></svg>',
+    clipe: '<svg viewBox="0 0 24 24"><path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>',
+    link: '<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"/></svg>',
+    entrega: '<svg viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4v10l8 4 8-4zM4 7l8 4 8-4M12 11v10"/></svg>'
   };
 
   let toastTimer;
@@ -78,6 +82,17 @@
   }
   const confirmar = (tit, msg, rotulo = 'Confirmar', classe = 'prim') =>
     dialogo({ titulo: tit, corpo: `<p style="margin:0">${msg}</p>`, acoes: [{ rotulo: 'Cancelar', valor: false }, { rotulo, classe, valor: true }] });
+
+  async function pedirTexto(tit, rotulo, valor) {
+    let v = null;
+    await dialogo({
+      titulo: tit,
+      corpo: `<div class="campo"><label for="pt-v">${esc(rotulo)}</label><input id="pt-v" value="${esc(valor || '')}"></div>`,
+      acoes: [{ rotulo: 'Cancelar', valor: null }, { rotulo: 'OK', classe: 'prim', valor: 'ok', antes: d => { v = d.querySelector('#pt-v').value.trim(); if (!v) return false; } }],
+      aoAbrir: d => { const i = d.querySelector('#pt-v'); i.focus(); i.select(); }
+    });
+    return v;
+  }
 
   function topo(texto, { voltar = null, acoes = '' } = {}) {
     titulo.textContent = texto;
@@ -319,6 +334,16 @@
       </div>
       <label class="check" id="dim-pdf-l" style="margin-top:8px"><input type="checkbox" id="dim-pdf" ${o.dimNoPdf !== false ? 'checked' : ''}> Incluir o dimensionamento no PDF do orçamento</label>
 
+      <h2>Desenhos e anexos</h2>
+      <div id="anx"></div>
+      <div class="acoes">
+        <button class="btn" id="anx-des" type="button">${ICON.desenho} Novo desenho</button>
+        <button class="btn" id="anx-uni" type="button">${ICON.cabo} Unifilar automático</button>
+        <label class="btn" style="color:var(--text)">${ICON.clipe} Arquivo<input type="file" id="anx-arq" multiple accept=".pdf,.dwg,.dxf,.drawio,.zip,image/*,application/pdf" hidden></label>
+        <button class="btn" id="anx-link" type="button">${ICON.link} Link</button>
+      </div>
+      <p class="ajuda">Desenhos no editor draw.io (precisa de internet), arquivos de outros programas (PDF, DWG, DXF, fotos) e links (ex.: Tinkercad). Os marcados com "Entregar" vão para o cliente na entrega da obra. Os arquivos ficam guardados neste aparelho.</p>
+
       <h2>Valores</h2>
       <div class="card">
         <div class="campos">
@@ -372,6 +397,7 @@
     function desenharCircuitos() {
       const L = o.circuitos || [];
       app.querySelector('#dim-pdf-l').hidden = !L.length;
+      app.querySelector('#anx-uni').hidden = !L.length;
       app.querySelector('#circ').innerHTML = L.length ? `<div class="lista">${L.map((c, i) => {
         const calc = (c.linhas || []).filter(l => l.tipo === 'calculo' && !l.erro);
         const res = [...calc.filter(l => l.destaque), ...calc.filter(l => l.resumo && !l.destaque)].slice(0, 3).map(l => `${l.rotulo}: ${l.valor}${l.unidade ? ' ' + l.unidade : ''}`).join(' · ');
@@ -396,6 +422,155 @@
       o.circuitos.push(r); desenharCircuitos(); agendarSalvar();
     };
     app.querySelector('#dim-pdf').addEventListener('change', ev => { o.dimNoPdf = ev.target.checked; agendarSalvar(); });
+
+    /* Desenhos e anexos (js/arquivos.js) */
+    const A = window.Arquivos;
+    function desenharAnexos() {
+      const L = o.anexos || [];
+      const ic = a => a.tipo === 'link' ? ICON.link : a.tipo === 'desenho' ? ICON.desenho : A.ehImagem(a.mime) ? ICON.doc : ICON.clipe;
+      const det = a => a.tipo === 'link' ? (a.url || '').replace(/^https?:\/\//, '') : `${a.tipo === 'desenho' ? 'Desenho' : (a.nome.split('.').pop() || '').toUpperCase()} · ${A.tamanhoFmt(a.tamanho)}`;
+      app.querySelector('#anx').innerHTML = L.length ? `<div class="lista">${L.map((a, i) => `
+        <div class="linha anx-l"><button class="anx-abrir" type="button" data-anx="${i}"><span class="ag-ic ok">${ic(a)}</span>
+          <div class="principal"><div class="t1">${esc(a.nome)}</div><div class="t2">${esc(det(a))}</div></div></button>
+          <label class="anx-ent" title="Entregar ao cliente"><input type="checkbox" data-ent="${i}" ${a.entregar !== false ? 'checked' : ''}><span>Entregar</span></label></div>`).join('')}</div>` : '';
+    }
+    async function guardarArquivo(blob, nome, tipo, idExistente) {
+      const id = idExistente || st.uid();
+      try { await A.salvar(id, blob); } catch (e) { toast('Não foi possível guardar o arquivo: armazenamento cheio.'); return null; }
+      const ficha = { id, tipo, nome, mime: blob.type || '', tamanho: blob.size, entregar: true, criadoEm: new Date().toISOString() };
+      o.anexos = o.anexos || [];
+      const i = o.anexos.findIndex(x => x.id === id);
+      if (i >= 0) o.anexos[i] = { ...o.anexos[i], mime: ficha.mime, tamanho: ficha.tamanho, atualizadoEm: ficha.criadoEm };
+      else o.anexos.push(ficha);
+      desenharAnexos(); agendarSalvar();
+      return ficha;
+    }
+    async function editarDesenho(fonte, nome, idExistente) {
+      if (!navigator.onLine) { toast('O editor de desenho precisa de internet.'); return; }
+      const png = await A.abrirDrawio(fonte, nome);
+      if (!png) return;
+      const f = await guardarArquivo(await A.deDataUrl(png), nome, 'desenho', idExistente);
+      if (f) toast('Desenho salvo.');
+    }
+    app.querySelector('#anx-des').onclick = async () => {
+      const nome = await pedirTexto('Novo desenho', 'Nome do desenho', `Desenho ${(o.anexos || []).filter(a => a.tipo === 'desenho').length + 1}`);
+      if (nome) editarDesenho({ xml: '' }, nome);
+    };
+    app.querySelector('#anx-uni').onclick = () => {
+      if (!(o.circuitos || []).length) { toast('Adicione circuitos no dimensionamento primeiro.'); return; }
+      editarDesenho({ xml: A.gerarUnifilarXml(o) }, 'Diagrama unifilar');
+    };
+    app.querySelector('#anx-arq').addEventListener('change', async ev => {
+      const fs = [...ev.target.files]; ev.target.value = '';
+      for (const f of fs) {
+        if (f.size > 25 * 1048576) { toast(`${f.name}: arquivo maior que 25 MB.`); continue; }
+        await guardarArquivo(f, f.name, 'arquivo');
+      }
+      if (fs.length) toast(`${fs.length} arquivo(s) anexado(s).`);
+    });
+    app.querySelector('#anx-link').onclick = async () => {
+      let dados = null;
+      await dialogo({
+        titulo: 'Adicionar link',
+        corpo: `<div class="campos">
+          <div class="campo"><label for="lk-u">Endereço (URL)</label><input id="lk-u" type="url" inputmode="url" placeholder="https://www.tinkercad.com/things/..." autocapitalize="off"></div>
+          <div class="campo"><label for="lk-n">Nome</label><input id="lk-n" placeholder="Ex.: Ligação do sensor da caixa-d'água (Tinkercad)"></div></div>
+          <p class="ajuda">No Tinkercad: abra o projeto → <b>Compartilhar</b> → deixe o projeto público ou com link e copie o endereço.</p>`,
+        acoes: [{ rotulo: 'Cancelar', valor: null }, { rotulo: 'Adicionar', classe: 'prim', valor: 'ok', antes: d => {
+          let u = d.querySelector('#lk-u').value.trim();
+          if (u && !/^https?:\/\//i.test(u)) u = 'https://' + u;
+          try { new URL(u); } catch (e) { d.querySelector('#lk-u').classList.add('invalido'); return false; }
+          const host = new URL(u).hostname.replace(/^www\./, '');
+          dados = { url: u, nome: d.querySelector('#lk-n').value.trim() || (/tinkercad/.test(host) ? 'Projeto no Tinkercad' : host) };
+        } }]
+      });
+      if (!dados) return;
+      o.anexos = o.anexos || [];
+      o.anexos.push({ id: st.uid(), tipo: 'link', nome: dados.nome, url: dados.url, entregar: true, criadoEm: new Date().toISOString() });
+      desenharAnexos(); agendarSalvar();
+    };
+    app.querySelector('#anx').addEventListener('change', ev => {
+      const c = ev.target.closest('[data-ent]'); if (!c) return;
+      o.anexos[Number(c.dataset.ent)].entregar = c.checked; agendarSalvar();
+    });
+    app.querySelector('#anx').addEventListener('click', async ev => {
+      const b = ev.target.closest('[data-anx]'); if (!b) return;
+      const a = o.anexos[Number(b.dataset.anx)];
+      const r = await dialogo({
+        titulo: a.nome,
+        corpo: `<div class="lista">
+          <button class="linha" data-op="abrir">${a.tipo === 'link' ? ICON.link : ICON.doc}<div class="principal"><div class="t1">${a.tipo === 'link' ? 'Abrir link' : 'Abrir'}</div>${a.tipo === 'link' ? `<div class="t2">${esc(a.url)}</div>` : ''}</div></button>
+          ${a.tipo === 'desenho' ? `<button class="linha" data-op="editar">${ICON.desenho}<div class="principal"><div class="t1">Editar desenho</div><div class="t2">Abre no draw.io</div></div></button>` : ''}
+          <button class="linha" data-op="nome">${ICON.lista}<div class="principal"><div class="t1">Renomear</div></div></button>
+          <button class="linha" data-op="exc" style="color:var(--danger)">${ICON.lixo}<div class="principal"><div class="t1">Excluir</div></div></button></div>`,
+        acoes: [],
+        aoAbrir: (d, fechar) => d.querySelector('.lista').addEventListener('click', e => { const x = e.target.closest('[data-op]'); if (x) fechar(x.dataset.op); })
+      });
+      if (r === 'abrir') {
+        if (a.tipo === 'link') { window.open(a.url, '_blank', 'noopener'); return; }
+        const blob = await A.obter(a.id);
+        if (!blob) { toast('Este arquivo não está neste aparelho (foi anexado em outro).'); return; }
+        const url = URL.createObjectURL(blob);
+        if (!window.open(url, '_blank')) window.WhatsApp.baixar(blob, a.tipo === 'desenho' ? a.nome + '.png' : a.nome);
+        setTimeout(() => URL.revokeObjectURL(url), 120000);
+      }
+      if (r === 'editar') {
+        const blob = await A.obter(a.id);
+        if (!blob) { toast('Este desenho não está neste aparelho (foi feito em outro).'); return; }
+        editarDesenho({ xmlpng: await A.paraDataUrl(blob) }, a.nome, a.id);
+      }
+      if (r === 'nome') { const n = await pedirTexto('Renomear', 'Nome', a.nome); if (n) { a.nome = n; desenharAnexos(); agendarSalvar(); } }
+      if (r === 'exc' && await confirmar('Excluir anexo', `Excluir "${esc(a.nome)}"?`, 'Excluir')) {
+        o.anexos = o.anexos.filter(x => x !== a); if (a.tipo !== 'link') A.excluir(a.id);
+        desenharAnexos(); agendarSalvar();
+      }
+    });
+
+    /* Entrega da obra: termo em PDF (com desenhos, fotos e dimensionamento) + arquivos */
+    async function entregarObra() {
+      const c = st.cliente(o.clienteId);
+      if (!c) { toast('Escolha o cliente do orçamento.'); return; }
+      clearTimeout(tSalvar); st.salvarOrcamento(o);
+      const sel = (o.anexos || []).filter(a => a.entregar !== false);
+      const faltando = [], imagens = [], arquivos = [];
+      for (const a of sel) {
+        if (a.tipo === 'link') continue;
+        const blob = await A.obter(a.id);
+        if (!blob) { faltando.push(a.nome); continue; }
+        if (a.tipo === 'desenho' || A.ehImagem(blob.type || a.mime)) imagens.push({ nome: a.nome, dataUrl: await A.paraDataUrl(blob) });
+        else arquivos.push({ blob, nome: a.nome });
+      }
+      const pdf = window.PDF.gerarEntrega(o, imagens);
+      const todos = [{ blob: pdf, nome: window.PDF.nomeEntrega(o) }, ...arquivos];
+      const links = sel.filter(a => a.tipo === 'link');
+      const r = await dialogo({
+        titulo: 'Entrega da obra',
+        corpo: `<p style="margin-top:0">Vai para <b>${esc(c.nome)}</b>:</p>
+          <ul style="padding-left:18px;margin:0">
+            <li><b>Termo de entrega (PDF)</b>: serviços, garantia, documentos e campo "Recebido pelo cliente"${(o.circuitos || []).length ? ', com o dimensionamento' : ''}${imagens.length ? `, com ${imagens.length} desenho(s)/foto(s)` : ''}.</li>
+            ${arquivos.map(x => `<li>${esc(x.nome)}</li>`).join('')}
+            ${links.length ? `<li>${links.length} link(s) na mensagem: ${links.map(x => esc(x.nome)).join(', ')}</li>` : ''}
+          </ul>
+          ${faltando.length ? `<p class="ajuda" style="color:var(--warn)">Não estão neste aparelho e ficarão de fora: ${faltando.map(esc).join(', ')}.</p>` : ''}
+          ${!st.telefoneValido(c.telefone) ? '<p class="ajuda" style="color:var(--warn)">Cliente sem WhatsApp válido: só dá para baixar.</p>' : ''}`,
+        acoes: [{ rotulo: 'Baixar', valor: 'baixar' }, ...(st.telefoneValido(c.telefone) ? [{ rotulo: 'Enviar', classe: 'prim', valor: 'enviar' }] : [])]
+      });
+      if (!r) return;
+      if (r === 'baixar') { todos.forEach((x, i) => setTimeout(() => window.WhatsApp.baixar(x.blob, x.nome), i * 400)); return; }
+      const msg = window.WhatsApp.mensagemEntrega(o);
+      const copiada = await window.WhatsApp.copiar(msg);
+      const res = await window.WhatsApp.enviarArquivos(todos, `Entrega da obra ${o.numero}`, msg);
+      if (res === 'cancelado') return;
+      o.entregueEm = new Date().toISOString(); st.salvarOrcamento(o);
+      const abrir = await dialogo({
+        titulo: res === 'compartilhado' ? 'Agora envie a mensagem' : 'Anexe os arquivos na conversa',
+        corpo: res === 'compartilhado'
+          ? `<p style="margin-top:0">O WhatsApp entrega os arquivos sem o texto.${copiada ? ' A mensagem (com os links) já está <b>copiada</b>.' : ''}</p><p>Toque abaixo para abrir a conversa com <b>${esc(c.nome)}</b> com a mensagem escrita.</p>`
+          : `<p style="margin-top:0">Os arquivos foram baixados. Abra a conversa com <b>${esc(c.nome)}</b> e anexe-os pelo clipe; a mensagem já vai escrita.</p>`,
+        acoes: [{ rotulo: 'Fechar', valor: false }, { rotulo: 'Abrir conversa', classe: 'prim', valor: true }]
+      });
+      if (abrir) window.WhatsApp.abrirConversa(c.telefone, msg);
+    }
 
     function atualizarTotais() {
       const t = st.totais(o);
@@ -448,7 +623,12 @@
       const el = ev.target;
       if (el.dataset.k === 'tipo') desenharItens();
       if (el.dataset.f === 'status' && el.value === 'Enviado' && !o.enviadoEm) o.enviadoEm = new Date().toISOString();
-      if (el.dataset.f === 'status' && el.value === 'Concluído' && !o.concluidoEm) o.concluidoEm = new Date().toISOString();
+      if (el.dataset.f === 'status' && el.value === 'Concluído') {
+        if (!o.concluidoEm) o.concluidoEm = new Date().toISOString();
+        if (!o.entregueEm) setTimeout(async () => {
+          if (await confirmar('Serviço concluído', 'Enviar agora a entrega da obra ao cliente (termo de entrega, desenhos e documentos)?', 'Preparar entrega')) entregarObra();
+        }, 400);
+      }
       if (el.dataset.f === 'dataInicio') el.classList.toggle('invalido', !el.value);
     });
     app.addEventListener('focusout', ev => {
@@ -631,6 +811,7 @@
           <button class="linha" data-op="baixar">${ICON.pdf}<div class="principal"><div class="t1">Baixar PDF</div></div></button>
           ${(o.circuitos || []).length ? `<button class="linha" data-op="mem-env">${ICON.cabo}<div class="principal"><div class="t1">Enviar dimensionamento para "de acordo"</div><div class="t2">PDF separado só com os circuitos e o campo de aceite</div></div></button>
           <button class="linha" data-op="mem-baixar">${ICON.pdf}<div class="principal"><div class="t1">Baixar PDF do dimensionamento</div></div></button>` : ''}
+          <button class="linha" data-op="entrega">${ICON.entrega}<div class="principal"><div class="t1">Entrega da obra</div><div class="t2">${o.entregueEm ? 'Enviada em ' + esc(st.dataBR(o.entregueEm)) : 'Termo de entrega com desenhos e documentos'}</div></div></button>
           <button class="linha" data-op="dup">${ICON.copiar}<div class="principal"><div class="t1">Duplicar orçamento</div></div></button>
           <button class="linha" data-op="exc" style="color:var(--danger)">${ICON.lixo}<div class="principal"><div class="t1">Excluir orçamento</div></div></button>
         </div>`,
@@ -655,6 +836,7 @@
         if (r === 'mem-baixar') window.WhatsApp.baixar(blob, nome);
         else await enviarParaCliente(blob, nome, true);
       }
+      if (r === 'entrega') entregarObra();
       if (r === 'dup') { const n = st.duplicarOrcamento(o); toast('Cópia criada: ' + n.numero); location.hash = '#/orcamento/' + n.id; }
       if (r === 'exc' && await confirmar('Excluir orçamento', `Excluir ${esc(o.numero)}? Não dá para desfazer.`, 'Excluir')) {
         st.excluirOrcamento(o.id); toast('Orçamento excluído.'); location.hash = '#/orcamentos';
@@ -669,7 +851,7 @@
       if (st.orcamentoVazio(o)) st.excluirOrcamento(o.id); else if (sujo) st.salvarOrcamento(o);
     };
 
-    desenharItens(); desenharCircuitos(); atualizarTotais(); atualizarPendencias();
+    desenharItens(); desenharCircuitos(); desenharAnexos(); atualizarTotais(); atualizarPendencias();
   }
 
   /* ---------- Dimensionamento (NBR 5410) ----------
@@ -1452,7 +1634,7 @@
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.10.0</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.11.0</p>`;
 
     // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {

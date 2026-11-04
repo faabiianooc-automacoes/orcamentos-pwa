@@ -74,8 +74,11 @@
     return y + 2;
   }
 
+  /* opc.memorial: PDF só do dimensionamento (de acordo)
+     opc.entrega: termo de entrega da obra; opc.imagens = [{nome, dataUrl}] (desenhos e fotos) */
   function gerar(o, opc = {}) {
     const memorial = !!opc.memorial;
+    const entrega = !!opc.entrega;
     const { jsPDF } = window.jspdf;
     const st = S();
     const e = st.db.empresa;
@@ -92,7 +95,7 @@
     const M = 15;
     let y = M;
 
-    doc.setProperties({ title: memorial ? `Dimensionamento ${o.numero}` : `Orçamento ${o.numero}`, subject: limpar(o.titulo), author: limpar(e.nome), creator: 'Orçamentos PWA' });
+    doc.setProperties({ title: entrega ? `Entrega da obra ${o.numero}` : memorial ? `Dimensionamento ${o.numero}` : `Orçamento ${o.numero}`, subject: limpar(o.titulo), author: limpar(e.nome), creator: 'Orçamentos PWA' });
 
     /* Cabeçalho */
     let xTexto = M;
@@ -117,11 +120,14 @@
     linhasEmp.forEach((l, i) => doc.text(l, xTexto, y + 10 + i * 4));
 
     doc.setTextColor(...corT); doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
-    doc.text(memorial ? 'DIMENSIONAMENTO' : 'ORÇAMENTO', W - M, y + 5, { align: 'right' });
+    doc.text(entrega ? 'ENTREGA DA OBRA' : memorial ? 'DIMENSIONAMENTO' : 'ORÇAMENTO', W - M, y + 5, { align: 'right' });
     doc.setTextColor(20, 32, 41); doc.setFontSize(10);
-    doc.text(limpar(memorial ? `Ref. orçamento ${o.numero}` : o.numero), W - M, y + 11, { align: 'right' });
+    doc.text(limpar(memorial || entrega ? `Ref. orçamento ${o.numero}` : o.numero), W - M, y + 11, { align: 'right' });
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(90, 100, 110);
-    if (memorial) {
+    if (entrega) {
+      doc.text(`Concluído em: ${st.dataBR(o.concluidoEm || st.hoje())}`, W - M, y + 16, { align: 'right' });
+      if (o.dataInicio) doc.text(`Início: ${st.dataBR(o.dataInicio)}`, W - M, y + 20, { align: 'right' });
+    } else if (memorial) {
       doc.text(`Data: ${st.dataBR(st.hoje())}`, W - M, y + 16, { align: 'right' });
       if (o.dataInicio) doc.text(`Início previsto: ${st.dataBR(o.dataInicio)}`, W - M, y + 20, { align: 'right' });
     } else {
@@ -130,7 +136,7 @@
     if (o.dataInicio) doc.text(`Início previsto: ${st.dataBR(o.dataInicio)}`, W - M, y + 24, { align: 'right' });
     }
 
-    y += o.dataInicio && !memorial ? 31 : 28;
+    y += o.dataInicio && !memorial && !entrega ? 31 : 28;
     doc.setDrawColor(...corF); doc.setLineWidth(0.8); doc.line(M, y, W - M, y);
     y += 7;
 
@@ -162,7 +168,60 @@
     const novaPaginaSe = alt => { if (y + alt > H - 22) { doc.addPage(); y = M; } };
     const temDim = (o.circuitos || []).length > 0;
 
-    if (memorial) {
+    if (entrega) {
+      /* Serviços executados (sem valores) */
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...corT);
+      doc.text('SERVIÇOS E MATERIAIS', M, y); y += 2;
+      doc.autoTable({
+        startY: y,
+        margin: { left: M, right: M, bottom: 20 },
+        head: [['#', 'Descrição', 'Qtd', 'Un.']],
+        body: o.itens.map((i, n) => [n + 1, limpar(i.descricao) + (i.tec && window.Tecnico && window.Tecnico.resumo(i.tec) ? '\n' + limpar(window.Tecnico.resumo(i.tec)) : ''), st.qtdFmt(i.qtd), limpar(i.unidade)]),
+        styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 2.2, textColor: [20, 32, 41], lineColor: [222, 228, 233], lineWidth: 0.1 },
+        headStyles: { fillColor: corF, textColor: sobreF, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: tintF2 },
+        columnStyles: { 0: { cellWidth: 8, halign: 'center' }, 2: { cellWidth: 14, halign: 'right' }, 3: { cellWidth: 14, halign: 'center' } }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+      const sec = (tit, txt) => {
+        if (!String(txt || '').trim()) return;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+        const l = doc.splitTextToSize(limpar(txt), W - 2 * M);
+        novaPaginaSe(8 + l.length * 4.2);
+        doc.setFont('helvetica', 'bold'); doc.setTextColor(...corT); doc.text(tit, M, y);
+        doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 50, 60); doc.text(l, M, y + 5);
+        y += 8 + l.length * 4.2;
+      };
+      sec('GARANTIA', o.garantia);
+      /* Documentos entregues */
+      const docs = (o.anexos || []).filter(a => a.entregar !== false);
+      const extras = [];
+      if ((o.circuitos || []).length) extras.push('Dimensionamento dos circuitos (neste documento)');
+      if (docs.length || extras.length) {
+        novaPaginaSe(14);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...corT);
+        doc.text('DOCUMENTOS ENTREGUES', M, y); y += 5.5;
+        doc.setFontSize(9);
+        [...extras.map(t => ({ t })), ...docs.map(a => ({ a }))].forEach(({ t, a }) => {
+          novaPaginaSe(6);
+          doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 50, 60);
+          if (t) { doc.text('- ' + limpar(t), M, y); y += 5; return; }
+          const tipo = a.tipo === 'link' ? 'link' : a.tipo === 'desenho' ? 'desenho, neste documento' : (window.Arquivos && window.Arquivos.ehImagem(a.mime) ? 'imagem, neste documento' : 'arquivo enviado junto');
+          doc.text(`- ${limpar(a.nome)} (${tipo})`, M, y); y += 4.6;
+          if (a.tipo === 'link' && a.url) {
+            doc.setFontSize(8); doc.setTextColor(...corT);
+            const u = limpar(a.url).slice(0, 110);
+            doc.textWithLink(u, M + 3, y, { url: a.url }); y += 5;
+            doc.setFontSize(9);
+          }
+        });
+        y += 2;
+      }
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+      const decl = doc.splitTextToSize(limpar('Declaro ter recebido os serviços descritos acima, concluídos e em funcionamento, e os documentos listados.'), W - 2 * M);
+      novaPaginaSe(decl.length * 4.2 + 52);
+      doc.setTextColor(40, 50, 60); doc.text(decl, M, y + 2); y += decl.length * 4.2 + 2;
+    } else if (memorial) {
       y = secaoDimensionamento(doc, o, y, k);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
       const decl = doc.splitTextToSize(limpar('Declaro estar de acordo com os dados, critérios e resultados do dimensionamento acima, que servirão de base para a execução dos serviços.'), W - 2 * M);
@@ -274,15 +333,35 @@
     doc.text(limpar(c.nome || 'Cliente'), xCli + colW / 2, yLinha + 4.5, { align: 'center' });
     doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(110, 120, 130);
     doc.text(limpar(e.assinaturaNome && e.nome && e.assinaturaNome !== e.nome ? e.nome : 'Responsável'), M + colW / 2, yLinha + 8.5, { align: 'center' });
-    doc.text(`${memorial ? 'De acordo do cliente' : 'Aceite do cliente'}   Data: ____/____/______`, xCli + colW / 2, yLinha + 8.5, { align: 'center' });
+    doc.text(`${entrega ? 'Recebido pelo cliente' : memorial ? 'De acordo do cliente' : 'Aceite do cliente'}   Data: ____/____/______`, xCli + colW / 2, yLinha + 8.5, { align: 'center' });
+
+    /* Entrega: anexos em páginas próprias (dimensionamento, desenhos e fotos) */
+    if (entrega) {
+      if ((o.circuitos || []).length) { doc.addPage(); y = M; secaoDimensionamento(doc, o, y, k); }
+      (opc.imagens || []).forEach(im => {
+        try {
+          const pr = doc.getImageProperties(im.dataUrl);
+          const paisagem = pr.width > pr.height * 1.15;
+          doc.addPage('a4', paisagem ? 'l' : 'p');
+          const PW = doc.internal.pageSize.getWidth(), PH = doc.internal.pageSize.getHeight();
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...corT);
+          doc.text(limpar(im.nome), M, M + 2);
+          const mw = PW - 2 * M, mh = PH - 2 * M - 16;
+          const r = Math.min(mw / pr.width, mh / pr.height);
+          const w = pr.width * r, h = pr.height * r;
+          doc.addImage(im.dataUrl, pr.fileType || 'PNG', M + (mw - w) / 2, M + 8, w, h, undefined, 'FAST');
+        } catch (err) { /* imagem inválida: pula */ }
+      });
+    }
 
     /* Rodapé */
     const total = doc.getNumberOfPages();
     for (let p = 1; p <= total; p++) {
       doc.setPage(p);
       doc.setFontSize(7.5); doc.setTextColor(140, 150, 160); doc.setFont('helvetica', 'normal');
-      doc.text(limpar(`${memorial ? 'Dimensionamento · ' : ''}${o.numero} · ${e.nome || ''}`), M, H - 8);
-      doc.text(`Página ${p} de ${total}`, W - M, H - 8, { align: 'right' });
+      const PW = doc.internal.pageSize.getWidth(), PH = doc.internal.pageSize.getHeight();
+      doc.text(limpar(`${entrega ? 'Entrega da obra · ' : memorial ? 'Dimensionamento · ' : ''}${o.numero} · ${e.nome || ''}`), M, PH - 8);
+      doc.text(`Página ${p} de ${total}`, PW - M, PH - 8, { align: 'right' });
     }
     return doc.output('blob');
   }
@@ -290,6 +369,8 @@
   const nomeArquivo = o => `Orcamento-${String(o.numero).replace(/[^\w-]/g, '')}.pdf`;
   const nomeMemorial = o => `Dimensionamento-${String(o.numero).replace(/[^\w-]/g, '')}.pdf`;
   const gerarMemorial = o => gerar(o, { memorial: true });
+  const gerarEntrega = (o, imagens) => gerar(o, { entrega: true, imagens });
+  const nomeEntrega = o => `Entrega-${String(o.numero).replace(/[^\w-]/g, '')}.pdf`;
 
-  window.PDF = { gerar, nomeArquivo, gerarMemorial, nomeMemorial };
+  window.PDF = { gerar, nomeArquivo, gerarMemorial, nomeMemorial, gerarEntrega, nomeEntrega };
 })();
