@@ -423,3 +423,75 @@ body.sem-rolagem { overflow: hidden; }
 .ins-l { align-items: flex-start !important; }
 .assin-pad { width: 100%; height: auto; aspect-ratio: 600 / 220; background: #fff; border: 1px dashed var(--line); border-radius: 10px; touch-action: none; display: block; }
 .campo.c1 { grid-column: span 1; }
+
+/* ============================================================
+   Identidade visual (paleta da marca: amarelo, preto e branco)
+   Inspirada no material de divulgação: títulos fortes, botões
+   pretos e amarelos, ícones em círculos amarelos.
+   ============================================================ */
+.topbar h1 { font-weight: 800; letter-spacing: .01em; }
+
+/* Títulos de seção: preto forte com marcador amarelo */
+h2 { color: var(--text); font-weight: 800; letter-spacing: .07em; display: flex; align-items: center; gap: 8px; }
+h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; background: var(--marca-amarelo); flex: none; }
+h2.sub::before { height: 10px; }
+dialog h2 { margin-top: 18px; }
+
+/* Botões: principal amarelo, secundário preto (como no material da marca) */
+.btn { background: var(--marca-preto); color: #fff; border: 1.5px solid var(--marca-preto); font-weight: 700; }
+.btn:hover { background: #24292b; }
+.btn svg { color: var(--marca-amarelo); }
+.btn.prim { background: var(--marca-amarelo); border-color: var(--marca-amarelo); color: var(--marca-preto); font-weight: 800; }
+.btn.prim svg { color: var(--marca-preto); }
+.btn.prim:hover { background: #ffd92e; filter: none; }
+.btn.perigo { background: var(--surface); color: var(--danger); border-color: var(--danger); }
+.btn.perigo svg { color: var(--danger); }
+.btn.perigo:hover { background: var(--danger-soft); }
+.btn:disabled { opacity: .45; cursor: default; }
+label.btn { color: #fff !important; }
+.dlg-rod .btn:not(.prim):not(.perigo), .barra-total .btn:not(.prim) { background: var(--surface); color: var(--text); border-color: var(--text); }
+.dlg-rod .btn:not(.prim):not(.perigo) svg, .barra-total .btn:not(.prim) svg { color: var(--text); }
+.fab { background: var(--marca-amarelo); color: var(--marca-preto); font-weight: 800; }
+@media (prefers-color-scheme: dark) {
+  .btn { background: #000; border-color: #3a4044; }
+  .btn:hover { background: #1b1f21; }
+  .dlg-rod .btn:not(.prim):not(.perigo), .barra-total .btn:not(.prim) { background: transparent; color: #fff; border-color: #5a6064; }
+}
+
+/* Ícones em círculo amarelo com desenho preto (os de alerta mantêm a cor do significado) */
+.ag-ic.ok { background: var(--marca-amarelo); color: var(--marca-preto); }
+.lista > a > svg:last-child { color: var(--primary-text); }
+
+/* Chips: ativo amarelo; inativo com contorno preto */
+.chip { border: 1.5px solid var(--line); font-weight: 600; }
+.chip.ativo { background: var(--marca-amarelo); border-color: var(--marca-amarelo); color: var(--marca-preto); }
+
+/* Cartões e indicadores */
+.stat { border-top: 3px solid var(--marca-amarelo); }
+.stat .num { font-weight: 800; }
+.pcard { border-left-width: 5px; }
+.pcard.ok { border-left-color: var(--marca-amarelo); }
+.pcard.ok .pc-topo svg { color: var(--primary-text); }
+.pc-num { font-weight: 800; }
+.card { border-color: var(--line); }
+.item { border-left: 4px solid var(--marca-preto); }
+.item.sem-valor { border-left-color: var(--warn); }
+.grupo-cab { border-left: 4px solid var(--marca-amarelo); }
+.barra-total { border-top: 3px solid var(--marca-amarelo); }
+.barra-total .tot .v { font-weight: 900; }
+@media (prefers-color-scheme: dark) { .item { border-left-color: var(--marca-amarelo); } }
+
+/* Diálogos: cabeçalho preto como a barra do app */
+.dlg-cab { background: var(--marca-preto); color: #fff; border-bottom: 3px solid var(--marca-amarelo); border-radius: 16px 16px 0 0; }
+.dlg-cab .icon-btn { color: #fff; }
+.dlg-cab .icon-btn:hover { background: rgba(255, 255, 255, .1); }
+
+/* Avisos de "dica" no tom amarelo da marca */
+.aviso:not(.info) { background: var(--primary-soft); border-left: 4px solid var(--marca-amarelo); }
+.aviso:not(.info) svg { color: var(--primary-text); }
+
+/* Barra de progresso e seleção */
+.barra span { background: var(--marca-amarelo); }
+::selection { background: var(--marca-amarelo); color: var(--marca-preto); }
+input[type="checkbox"] { accent-color: var(--marca-amarelo); }
+.lista > button.linha:not([style]) > svg:first-child, .lista > a > svg:first-child { color: var(--primary-text); }

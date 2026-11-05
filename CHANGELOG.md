@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.15.1] - 2026-11-05
+- Visual completo na paleta da marca: botões secundários pretos (ícone amarelo) e principais amarelos (texto preto), títulos de seção com marcador amarelo, ícones em círculos amarelos com desenho preto, cartões e indicadores com faixa amarela, cabeçalho preto nas janelas, chips e caixas de seleção amarelos, avisos no tom amarelo.
+
 ## [1.15.0] - 2026-11-05
 - Nova identidade visual com a paleta da marca: amarelo (#FACC05), preto (#0F1213) e branco. Barras superior e inferior pretas com detalhe amarelo, botões e destaques amarelos com texto preto, modo escuro em preto e amarelo; textos e links em dourado escuro no modo claro para manter a leitura.
 - Ícone do app refeito (documento branco com raio amarelo sobre preto).
