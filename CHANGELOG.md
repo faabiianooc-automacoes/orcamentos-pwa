@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.15.0] - 2026-11-05
+- Nova identidade visual com a paleta da marca: amarelo (#FACC05), preto (#0F1213) e branco. Barras superior e inferior pretas com detalhe amarelo, botões e destaques amarelos com texto preto, modo escuro em preto e amarelo; textos e links em dourado escuro no modo claro para manter a leitura.
+- Ícone do app refeito (documento branco com raio amarelo sobre preto).
+- PDF: cores padrão amarelo e preto; quem ainda usava o verde padrão passa para as novas cores automaticamente (cores personalizadas não mudam).
+
 ## [1.14.0] - 2026-11-05
 - Pix: chave em Ajustes; QR Code e "copia e cola" no PDF do orçamento (valor do sinal ou total), gerado no aparelho no padrão do Banco Central.
 - Pagamentos no orçamento: sinal (%), registro de pagamentos (valor, data, forma), saldo a receber, recibo em PDF com valor por extenso, botão para cobrar sinal/saldo pelo WhatsApp com o Pix.

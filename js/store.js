@@ -48,7 +48,7 @@
       seq: 0,
       empresa: {
         nome: '', documento: '', telefone: '', email: '', endereco: '', cidade: '',
-        logo: '', corTexto: '#0f766e', corFundo: '#0f766e',
+        logo: '', corTexto: '#121314', corFundo: '#facc05',
         assinatura: '', assinaturaNome: '', assinarAuto: true, rubricaTexto: '', rubricaEstilo: '',
         prefixo: 'ORC', validadeDias: 15, tecNoPdf: true,
         deslocValorKm: 2.5, deslocIdaVolta: true, origem: null, // deslocamento (js/rotas.js)
@@ -72,6 +72,8 @@
       if (!antiga.corFundo) d.empresa.corFundo = antiga.cor;
       delete d.empresa.cor;
     }
+    // Paleta nova (amarelo e preto): troca as cores do PDF só de quem ainda usava o padrão antigo (verde)
+    if (String(d.empresa.corTexto).toLowerCase() === '#0f766e' && String(d.empresa.corFundo).toLowerCase() === '#0f766e') { d.empresa.corTexto = '#121314'; d.empresa.corFundo = '#facc05'; }
     d.clientes = Array.isArray(d.clientes) ? d.clientes : [];
     d.orcamentos = Array.isArray(d.orcamentos) ? d.orcamentos : [];
     d.catalogo = Array.isArray(d.catalogo) ? d.catalogo : base.catalogo;
@@ -243,11 +245,11 @@
   }
 
   /* ---------- Cores ---------- */
-  const CORES_PADRAO = { corTexto: '#0f766e', corFundo: '#0f766e' };
+  const CORES_PADRAO = { corTexto: '#121314', corFundo: '#facc05' };
   function hexParaRgb(hex) {
     let h = String(hex || '').replace('#', '');
     if (h.length === 3) h = h.split('').map(c => c + c).join('');
-    if (!/^[0-9a-f]{6}$/i.test(h)) h = '0f766e';
+    if (!/^[0-9a-f]{6}$/i.test(h)) h = '121314';
     return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
   }
   function luminancia(hex) {
