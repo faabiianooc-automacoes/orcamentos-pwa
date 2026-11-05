@@ -121,7 +121,7 @@
     const novo = app.cloneNode(false);
     app.replaceWith(novo);
     app = novo;
-    const telas = { inicio, orcamentos, orcamento: editorOrcamento, clientes, cliente: formCliente, ajustes, catalogo, relatorios, dimensionamento, formulas };
+    const telas = { inicio, orcamentos, orcamento: editorOrcamento, clientes, cliente: formCliente, ajustes, catalogo, relatorios, dimensionamento, formulas, ...((window.TelasExtras && window.TelasExtras.telas) || {}) };
     (telas[rota] || inicio)(id);
     window.scrollTo(0, 0);
   }
@@ -158,9 +158,11 @@
       }
     }
 
+    const PX = window.TelasExtras ? window.TelasExtras.inicioHtml() : { html: '', aReceber: 0, P: [] };
     app.innerHTML = `
       ${protecao}
       ${avisos.length ? `<div class="aviso">${ICON.alerta}<div><p><b>Para começar</b></p><ul>${avisos.map(a => `<li>${a}</li>`).join('')}</ul></div></div>` : ''}
+      ${PX.html}
       ${painelAgenda()}
       <h2>Resumo</h2>
       <div class="stats">
@@ -168,15 +170,20 @@
         <div class="stat"><div class="rot">Aguardando resposta</div><div class="num">${st.brl(soma(abertos))}</div></div>
         <div class="stat"><div class="rot">Aprovados (total)</div><div class="num">${st.brl(soma(aprovados))}</div></div>
         <div class="stat"><div class="rot">Taxa de aprovação</div><div class="num">${taxa}</div></div>
+        <div class="stat"><div class="rot">A receber</div><div class="num">${st.brl(PX.aReceber)}</div></div>
+        <div class="stat"><div class="rot">Recebido no mês</div><div class="num">${st.brl(db.orcamentos.reduce((t, o) => t + (o.pagamentos || []).filter(p => String(p.data).startsWith(mes)).reduce((a, p) => a + st.num(p.valor), 0), 0))}</div></div>
       </div>
       <div class="acoes"><a class="btn prim" href="#/orcamento/novo">${ICON.mais} Novo orçamento</a><a class="btn" href="#/cliente/novo">${ICON.mais} Novo cliente</a></div>
       <h2>Ferramentas</h2>
       <div class="lista"><a href="#/dimensionamento"><span class="ag-ic ok">${ICON.cabo}</span>
-        <div class="principal"><div class="t1">Dimensionamento</div><div class="t2">Cabos e proteção conforme a NBR 5410</div></div>${ICON.seta}</a></div>
+        <div class="principal"><div class="t1">Dimensionamento</div><div class="t2">Cabos e proteção conforme a NBR 5410</div></div>${ICON.seta}</a>
+        <a href="#/calculadoras"><span class="ag-ic ok">${ICON.relogio}</span><div class="principal"><div class="t1">Calculadoras de campo</div><div class="t2">Corrente, queda de tensão, conversões, lei de Ohm</div></div>${ICON.seta}</a>
+        <a href="#/ferramentas"><span class="ag-ic ok">${ICON.lista}</span><div class="principal"><div class="t1">Ferramentas e kits</div><div class="t2">Desgaste e aluguel por tipo de serviço</div></div>${ICON.seta}</a></div>
       <h2>Recentes</h2>
       ${listaOrcamentos(db.orcamentos.slice(0, 6))}`;
     const bk = app.querySelector('#bk-inicio');
     if (bk) bk.onclick = async () => { if (await fazerBackup()) inicio(); };
+    if (window.TelasExtras) window.TelasExtras.inicioLigar(app, PX.P, inicio);
   }
 
   /* Texto relativo: "hoje", "amanhã", "em 3 dias", "há 2 dias" */
@@ -336,6 +343,8 @@
       <div id="circ"></div>
       <div class="acoes">
         <button class="btn" id="add-circ" type="button">${ICON.cabo} Adicionar circuito</button>
+        <button class="btn" id="cargas" type="button">${ICON.lista} Previsão de cargas</button>
+        <button class="btn" id="lista-mat" type="button">${ICON.lista} Lista de materiais</button>
       </div>
       <label class="check" id="dim-pdf-l" style="margin-top:8px"><input type="checkbox" id="dim-pdf" ${o.dimNoPdf !== false ? 'checked' : ''}> Incluir o dimensionamento no PDF do orçamento</label>
 
@@ -348,12 +357,17 @@
         <button class="btn" id="anx-uni" type="button">${ICON.cabo} Unifilar automático</button>
         <label class="btn" style="color:var(--text)">${ICON.clipe} Arquivo<input type="file" id="anx-arq" multiple accept=".pdf,.dwg,.dxf,.drawio,.zip,image/*,application/pdf" hidden></label>
         <button class="btn" id="anx-link" type="button">${ICON.link} Link</button>
+        <label class="btn" style="color:var(--text)">${ICON.doc} Fotos do serviço<input type="file" id="anx-foto" accept="image/*" capture="environment" multiple hidden></label>
+        <button class="btn" id="anx-gfotos" type="button">${ICON.nuvem} Enviar fotos ao Google Fotos</button>
       </div>
       <p class="ajuda"><b>Planta com pontos:</b> escolha a foto ou imagem da planta do cômodo; ela abre como fundo travado e você marca tomadas, interruptores e pontos de luz com a biblioteca <b>simbolos-planta</b> (<a href="drawio/simbolos-planta.xml" download>baixar biblioteca</a>).</p>
       <p class="ajuda">Desenhos no editor draw.io (precisa de internet), arquivos de outros programas (PDF, DWG, DXF, fotos) e links (ex.: Tinkercad). Os marcados com "Entregar" vão para o cliente na entrega da obra. Os arquivos ficam guardados neste aparelho.</p>
 
       <h2>Deslocamento</h2>
       <div class="card" id="desl"></div>
+
+      <h2>Ferramentas e equipamentos</h2>
+      <div class="card" id="ferr"></div>
 
       <h2>Valores</h2>
       <div class="card">
@@ -364,7 +378,11 @@
         </div>
         <div class="sep"></div>
         <div class="resumo" id="resumo"></div>
+        <div id="margem"></div>
       </div>
+
+      <h2>Pagamentos</h2>
+      <div class="card" id="pag"></div>
 
       <h2>Condições</h2>
       <div class="card"><div class="campos">
@@ -382,6 +400,7 @@
       </div></div>`;
 
     const elItens = app.querySelector('#itens');
+    const ctxX = {};
 
     function desenharItens() {
       if (!o.itens.length) {
@@ -399,7 +418,8 @@
             <div class="campo c2 m3"><label>Tipo</label><select data-k="tipo">${opt(st.TIPOS_ITEM, it.tipo)}</select></div>
             <div class="campo c2 m3"><label>Unidade</label><select data-k="unidade">${opt(st.UNIDADES.includes(it.unidade) ? st.UNIDADES : [...st.UNIDADES, it.unidade], it.unidade)}</select></div>
             <div class="campo c2 m3"><label>Qtd</label><input class="num" inputmode="decimal" data-k="qtd" value="${esc(st.qtdFmt(it.qtd))}"></div>
-            <div class="campo c4 m3"><label>Valor unitário (R$)</label><input class="num" inputmode="decimal" data-k="valor" value="${st.num(it.valor) ? esc(st.dec(it.valor)) : ''}" placeholder="Informe o valor"></div>
+            <div class="campo c2 m3"><label>Valor unitário (R$)</label><input class="num" inputmode="decimal" data-k="valor" value="${st.num(it.valor) ? esc(st.dec(it.valor)) : ''}" placeholder="Informe o valor"></div>
+            <div class="campo c2 m3"><label>Custo unit. (R$) <span class="muted">só você vê</span></label><input class="num" inputmode="decimal" data-k="custo" value="${st.num(it.custo) ? esc(st.dec(it.custo)) : ''}" placeholder="opcional"></div>
           </div>
           <div class="item-total" data-tot>${st.brl(st.num(it.qtd) * st.num(it.valor))}</div>
         </div>`).join('');
@@ -449,7 +469,7 @@
     function desenharAnexos() {
       const L = o.anexos || [];
       const ic = a => a.tipo === 'link' ? ICON.link : a.tipo === 'desenho' ? ICON.desenho : A.ehImagem(a.mime) ? ICON.doc : ICON.clipe;
-      const det = a => a.tipo === 'link' ? (a.url || '').replace(/^https?:\/\//, '') : `${a.tipo === 'desenho' ? 'Desenho' : (a.nome.split('.').pop() || '').toUpperCase()} · ${A.tamanhoFmt(a.tamanho)}`;
+      const det = a => a.tipo === 'link' ? (a.url || '').replace(/^https?:\/\//, '') : `${a.tipo === 'desenho' ? 'Desenho' : (a.nome.split('.').pop() || '').toUpperCase()} · ${A.tamanhoFmt(a.tamanho)}${a.gfotos ? ' · no Google Fotos ✓' : ''}`;
       app.querySelector('#anx').innerHTML = L.length ? `<div class="lista">${L.map((a, i) => `
         <div class="linha anx-l"><button class="anx-abrir" type="button" data-anx="${i}"><span class="ag-ic ok">${ic(a)}</span>
           <div class="principal"><div class="t1">${esc(a.nome)}</div><div class="t2">${esc(det(a))}</div></div></button>
@@ -561,6 +581,7 @@
     async function entregarObra() {
       const c = st.cliente(o.clienteId);
       if (!c) { toast('Escolha o cliente do orçamento.'); return; }
+      if (!o.assinaturaCliente && await confirmar('Assinatura do cliente', 'O cliente está com você? Ele pode assinar o recebimento no celular agora (vai no termo de entrega).', 'Coletar assinatura')) await window.TelasExtras.coletarAssinatura(o);
       clearTimeout(tSalvar); st.salvarOrcamento(o);
       const sel = (o.anexos || []).filter(a => a.entregar !== false);
       const faltando = [], imagens = [], arquivos = [];
@@ -601,6 +622,9 @@
         acoes: [{ rotulo: 'Fechar', valor: false }, { rotulo: 'Abrir conversa', classe: 'prim', valor: true }]
       });
       if (abrir) window.WhatsApp.abrirConversa(c.telefone, msg);
+      if (st.db.empresa.linkAvaliacao && !o.avaliacaoPedidaEm) setTimeout(async () => {
+        if (await confirmar('Avaliação no Google', `Pedir para ${esc(c.nome)} avaliar o seu serviço no Google?`, 'Pedir avaliação') && window.TelasExtras.enviarMsg('avaliacao', o)) { o.avaliacaoPedidaEm = new Date().toISOString(); st.salvarOrcamento(o); }
+      }, 1200);
     }
 
     /* Deslocamento: rota de carro da empresa até o cliente (js/rotas.js) */
@@ -683,6 +707,7 @@
         <span class="muted">Subtotal</span><span class="direita">${st.brl(t.subtotal)}</span>
         <span class="muted">Desconto</span><span class="direita">- ${st.brl(t.desconto)}</span>
         <span class="forte">Total</span><span class="direita forte">${st.brl(t.total)}</span>`;
+      if (ctxX.aoTotais) ctxX.aoTotais();
     }
 
     function atualizarPendencias() {
@@ -715,6 +740,7 @@
         const card = el.closest('[data-idx]');
         const it = o.itens[Number(card.dataset.idx)];
         it[el.dataset.k] = el.value;
+        if (el.dataset.k === 'custo') atualizarTotais();
         if (el.dataset.k === 'qtd' || el.dataset.k === 'valor') {
           card.querySelector('[data-tot]').textContent = st.brl(st.num(it.qtd) * st.num(it.valor));
           card.classList.toggle('sem-valor', st.num(it.valor) <= 0);
@@ -737,7 +763,7 @@
     });
     app.addEventListener('focusout', ev => {
       const el = ev.target;
-      if ((el.dataset.k === 'valor' || el.dataset.f === 'desconto') && el.value) el.value = st.dec(el.value);
+      if ((el.dataset.k === 'valor' || el.dataset.k === 'custo' || el.dataset.f === 'desconto') && el.value) el.value = st.dec(el.value);
     });
 
     elItens.addEventListener('click', async ev => {
@@ -796,7 +822,7 @@
       if (sel !== 'ok') return;
       ids.forEach(idc => {
         const i = cat.find(x => x.id === idc);
-        if (i) o.itens.push({ id: st.uid(), descricao: i.descricao, tipo: i.tipo, unidade: i.unidade, qtd: 1, valor: st.num(i.valor), ...(i.tec ? { tec: { ...i.tec } } : {}) });
+        if (i) o.itens.push({ id: st.uid(), descricao: i.descricao, tipo: i.tipo, unidade: i.unidade, qtd: 1, valor: st.num(i.valor), ...(st.num(i.custo) ? { custo: st.num(i.custo) } : {}), ...(i.tec ? { tec: { ...i.tec } } : {}) });
       });
       desenharItens(); atualizarTotais(); agendarSalvar();
       if (ids.length) toast(`${ids.length} item(ns) adicionado(s).`);
@@ -917,6 +943,9 @@
           ${(o.circuitos || []).length ? `<button class="linha" data-op="mem-env">${ICON.cabo}<div class="principal"><div class="t1">Enviar dimensionamento para "de acordo"</div><div class="t2">PDF separado só com os circuitos e o campo de aceite</div></div></button>
           <button class="linha" data-op="mem-baixar">${ICON.pdf}<div class="principal"><div class="t1">Baixar PDF do dimensionamento</div></div></button>` : ''}
           <button class="linha" data-op="entrega">${ICON.entrega}<div class="principal"><div class="t1">Entrega da obra</div><div class="t2">${o.entregueEm ? 'Enviada em ' + esc(st.dataBR(o.entregueEm)) : 'Termo de entrega com desenhos e documentos'}</div></div></button>
+          <button class="linha" data-op="inspecao">${ICON.lista}<div class="principal"><div class="t1">Inspeção e laudo</div><div class="t2">Checklist NBR 5410 com medições e laudo em PDF</div></div></button>
+          <button class="linha" data-op="assin-cli">${ICON.desenho}<div class="principal"><div class="t1">Assinatura do cliente</div><div class="t2">${o.assinaturaCliente ? 'Coletada em ' + esc(st.dataBR(o.assinaturaCliente.data)) : 'Cliente assina no celular (entrega e laudo)'}</div></div></button>
+          ${st.db.empresa.linkAvaliacao && c && st.telefoneValido(c.telefone) ? `<button class="linha" data-op="avaliacao">${ICON.conversa}<div class="principal"><div class="t1">Pedir avaliação no Google</div></div></button>` : ''}
           <button class="linha" data-op="dup">${ICON.copiar}<div class="principal"><div class="t1">Duplicar orçamento</div></div></button>
           <button class="linha" data-op="exc" style="color:var(--danger)">${ICON.lixo}<div class="principal"><div class="t1">Excluir orçamento</div></div></button>
         </div>`,
@@ -942,6 +971,9 @@
         else await enviarParaCliente(blob, nome, true);
       }
       if (r === 'entrega') entregarObra();
+      if (r === 'inspecao') { clearTimeout(tSalvar); st.salvarOrcamento(o); location.hash = '#/inspecao/' + o.id; }
+      if (r === 'assin-cli') window.TelasExtras.coletarAssinatura(o);
+      if (r === 'avaliacao' && window.TelasExtras.enviarMsg('avaliacao', o)) { o.avaliacaoPedidaEm = new Date().toISOString(); agendarSalvar(); }
       if (r === 'dup') { const n = st.duplicarOrcamento(o); toast('Cópia criada: ' + n.numero); location.hash = '#/orcamento/' + n.id; }
       if (r === 'exc' && await confirmar('Excluir orçamento', `Excluir ${esc(o.numero)}? Não dá para desfazer.`, 'Excluir')) {
         st.excluirOrcamento(o.id); toast('Orçamento excluído.'); location.hash = '#/orcamentos';
@@ -956,7 +988,11 @@
       if (st.orcamentoVazio(o)) st.excluirOrcamento(o.id); else if (sujo) st.salvarOrcamento(o);
     };
 
-    desenharItens(); desenharCircuitos(); desenharAnexos(); desenharDeslocamento(); atualizarTotais(); atualizarPendencias();
+    // Recursos extras (js/telas-extras.js): margem, pagamentos, ferramentas, cargas, materiais, fotos
+    Object.assign(ctxX, { o, app, salvar: agendarSalvar, redesenhar: () => { desenharItens(); desenharDeslocamento(); atualizarTotais(); }, guardarArquivo, desenharAnexos, desenharCircuitos });
+    desenharItens(); desenharCircuitos(); desenharAnexos(); desenharDeslocamento();
+    if (window.TelasExtras) window.TelasExtras.editor(ctxX);
+    atualizarTotais(); atualizarPendencias();
   }
 
   /* ---------- Dimensionamento (NBR 5410) ----------
@@ -1428,6 +1464,8 @@
           <div class="stat"><div class="rot">Aprovados e concluídos</div><div class="num">${st.brl(soma(aprov))}</div></div>
           <div class="stat"><div class="rot">Taxa de aprovação</div><div class="num">${taxa}</div></div>
           <div class="stat"><div class="rot">Ticket médio</div><div class="num">${st.brl(total / l.length)}</div></div>
+          <div class="stat"><div class="rot">Recebido</div><div class="num">${st.brl(l.reduce((s2, o) => s2 + window.Extras.pago(o), 0))}</div></div>
+          <div class="stat"><div class="rot">Lucro estimado (aprovados)</div><div class="num">${st.brl(aprov.reduce((s2, o) => s2 + window.Extras.margem(o).lucro, 0))}</div></div>
           <div class="stat"><div class="rot">Aguardando resposta</div><div class="num">${st.brl(soma(l.filter(o => st.statusExibido(o) === 'Enviado')))}</div></div>
         </div>
 
@@ -1758,6 +1796,27 @@
           <div class="acoes" style="margin-top:0"><button class="btn" type="button" id="d-conf">Conferir no mapa</button><button class="btn" type="button" id="d-gps">Usar minha localização atual</button></div></div>
       </div></div>
 
+      <h2>Pix e pagamentos</h2>
+      <div class="card" id="extra-cfg"><div class="campos">
+        <div class="campo"><label for="x-pix">Chave Pix</label><input id="x-pix" data-f="pixChave" value="${esc(e.pixChave || '')}" placeholder="CPF/CNPJ, celular, e-mail ou chave aleatória" autocapitalize="off"></div>
+        <div class="campo c3"><label for="x-pn">Nome do recebedor</label><input id="x-pn" data-f="pixNome" value="${esc(e.pixNome || '')}" placeholder="${esc(e.nome || 'Como aparece no banco')}" maxlength="25"></div>
+        <div class="campo c3"><label for="x-pc">Cidade do recebedor</label><input id="x-pc" data-f="pixCidade" value="${esc(e.pixCidade || '')}" placeholder="${esc(e.cidade || 'Ex.: São Paulo')}" maxlength="15"></div>
+        <div class="campo c2 m3"><label for="x-sinal">Sinal padrão (%)</label><input id="x-sinal" class="num" inputmode="numeric" data-f="sinalPct" value="${esc(st.num(e.sinalPct) || '')}" placeholder="0"></div>
+        <div class="campo c2 m3"><label for="x-mg">Margem mínima (%)</label><input id="x-mg" class="num" inputmode="numeric" data-f="margemMin" value="${esc(e.margemMin == null ? 30 : e.margemMin)}"></div>
+        <div class="campo c2 m3"><label for="x-gar">Garantia (dias)</label><input id="x-gar" class="num" inputmode="numeric" data-f="garantiaDias" value="${esc(e.garantiaDias || 90)}"></div>
+        <div class="campo c3 m3"><label for="x-man">Lembrar revisão após (meses)</label><input id="x-man" class="num" inputmode="numeric" data-f="manutencaoMeses" value="${esc(e.manutencaoMeses || 12)}"></div>
+        <div class="campo c3"><label for="x-av">Link de avaliação no Google</label><input id="x-av" data-f="linkAvaliacao" type="url" value="${esc(e.linkAvaliacao || '')}" placeholder="https://g.page/r/..." autocapitalize="off"><span class="ajuda">No Perfil da Empresa no Google: "Pedir avaliações" → copiar link.</span></div>
+      </div></div>
+
+      <h2>Google Fotos</h2>
+      <div class="card" id="gf-cfg"><div class="campos">
+        <div class="campo"><label for="x-gid">ID do cliente OAuth (Google Cloud)</label><input id="x-gid" data-f="googleClientId" value="${esc(e.googleClientId || '')}" placeholder="123456789-xxxx.apps.googleusercontent.com" autocapitalize="off" spellcheck="false">
+          <span class="ajuda">As fotos de cada orçamento vão para um álbum próprio ("ORC-2026-0001 - Cliente"). O app só cria álbuns e envia fotos: não vê o resto da sua biblioteca. <a href="GOOGLE-FOTOS.md" target="_blank" rel="noopener">Como obter o ID (10 min, gratuito)</a>.</span></div>
+      </div></div>
+
+      <h2>Ferramentas</h2>
+      <div class="lista"><a href="#/ferramentas">${ICON.lista}<div class="principal"><div class="t1">Ferramentas e kits</div><div class="t2">Desgaste das próprias e aluguel por tipo de serviço</div></div></a></div>
+
       <h2>Padrões dos novos orçamentos</h2>
       <div class="card" id="pad"><div class="campos">
         <div class="campo c3 m3"><label for="p-pre">Prefixo do número</label><input id="p-pre" data-f="prefixo" value="${esc(e.prefixo)}" maxlength="8"><span class="ajuda">Ex.: ${esc(e.prefixo || 'ORC')}-${new Date().getFullYear()}-0001</span></div>
@@ -1791,11 +1850,13 @@
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.13.0</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.14.0</p>`;
 
     // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {
-      const dados = { ...lerCampos(app.querySelector('#emp')), ...lerCampos(app.querySelector('#cores')), ...lerCampos(app.querySelector('#assin')), ...lerCampos(app.querySelector('#pad')), ...lerCampos(app.querySelector('#desl-cfg')) };
+      const dados = { ...lerCampos(app.querySelector('#emp')), ...lerCampos(app.querySelector('#cores')), ...lerCampos(app.querySelector('#assin')), ...lerCampos(app.querySelector('#pad')), ...lerCampos(app.querySelector('#desl-cfg')), ...lerCampos(app.querySelector('#extra-cfg')), ...lerCampos(app.querySelector('#gf-cfg')) };
+      ['sinalPct', 'margemMin', 'garantiaDias', 'manutencaoMeses'].forEach(k => { dados[k] = st.num(dados[k]); });
+      dados.googleClientId = String(dados.googleClientId || '').trim(); dados.pixChave = String(dados.pixChave || '').trim();
       dados.deslocValorKm = st.num(dados.deslocValorKm) || 2.5;
       dados.telefone = st.soDigitos(dados.telefone);
       dados.validadeDias = parseInt(dados.validadeDias, 10) || 15;
@@ -2307,6 +2368,7 @@
         <div class="campo c2 m3"><label>Tipo</label><select data-f="tipo">${opt(st.TIPOS_ITEM, it.tipo)}</select></div>
         <div class="campo c2 m3"><label>Unidade</label><select data-f="unidade">${opt(st.UNIDADES.includes(it.unidade) ? st.UNIDADES : [...st.UNIDADES, it.unidade], it.unidade)}</select></div>
         <div class="campo c2"><label>Preço (R$)</label><input class="num" inputmode="decimal" data-f="valor" value="${st.num(it.valor) ? esc(st.dec(it.valor)) : ''}" placeholder="0,00"></div>
+        <div class="campo c2"><label>Custo (R$) <span class="muted">só você vê</span></label><input class="num" inputmode="decimal" data-f="custo" value="${st.num(it.custo) ? esc(st.dec(it.custo)) : ''}" placeholder="opcional"></div>
       </div>
       ${htmlTec(it.tec, !!it.tec || it.tipo === 'Material')}`,
       acoes,
@@ -2314,7 +2376,7 @@
     });
     const voltar = () => { catalogo(); window.scrollTo(0, rolagem); };
     if (r === 'salvar') {
-      const novo = { ...it, ...dados, descricao: dados.descricao.trim(), valor: st.num(dados.valor) };
+      const novo = { ...it, ...dados, descricao: dados.descricao.trim(), valor: st.num(dados.valor), custo: st.num(dados.custo) };
       if (!novo.tec) delete novo.tec;
       st.salvarItemCatalogo(novo); toast('Item salvo.'); voltar();
     }
@@ -2369,5 +2431,7 @@
     });
     window.Nuvem.iniciar();
   }
+  // Funções de interface usadas por js/telas-extras.js
+  window.UI = { esc, ICON, toast, dialogo, confirmar, pedirTexto, topo, marcarAba, lerCampos, render, get app() { return app; } };
   render();
 })();

@@ -7,7 +7,7 @@
   const limpar = s => String(s == null ? '' : s)
     .replace(/[–—]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
     .replace(/…/g, '...').replace(/[  ]/g, ' ')
-    .replace(/²/g, '2').replace(/³/g, '3').replace(/√/g, 'raiz de ').replace(/≥/g, '>=').replace(/≤/g, '<=')
+    .replace(/MΩ/g, 'Mohm').replace(/Ω/g, 'ohm').replace(/²/g, '2').replace(/³/g, '3').replace(/√/g, 'raiz de ').replace(/≥/g, '>=').replace(/≤/g, '<=')
     .replace(/[^\x00-\xff\n]/g, '');
 
   /* Seção "Dimensionamento dos circuitos": resumo + detalhe de cada circuito.
@@ -79,6 +79,9 @@
   function gerar(o, opc = {}) {
     const memorial = !!opc.memorial;
     const entrega = !!opc.entrega;
+    const recibo = opc.recibo || null;   // { valor, data, forma, obs }
+    const laudo = !!opc.laudo;
+    const outro = memorial || entrega || recibo || laudo;
     const { jsPDF } = window.jspdf;
     const st = S();
     const e = st.db.empresa;
@@ -95,7 +98,7 @@
     const M = 15;
     let y = M;
 
-    doc.setProperties({ title: entrega ? `Entrega da obra ${o.numero}` : memorial ? `Dimensionamento ${o.numero}` : `Orçamento ${o.numero}`, subject: limpar(o.titulo), author: limpar(e.nome), creator: 'Orçamentos PWA' });
+    doc.setProperties({ title: recibo ? `Recibo ${o.numero}` : laudo ? `Laudo de inspeção ${o.numero}` : entrega ? `Entrega da obra ${o.numero}` : memorial ? `Dimensionamento ${o.numero}` : `Orçamento ${o.numero}`, subject: limpar(o.titulo), author: limpar(e.nome), creator: 'Orçamentos PWA' });
 
     /* Cabeçalho */
     let xTexto = M;
@@ -120,11 +123,15 @@
     linhasEmp.forEach((l, i) => doc.text(l, xTexto, y + 10 + i * 4));
 
     doc.setTextColor(...corT); doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
-    doc.text(entrega ? 'ENTREGA DA OBRA' : memorial ? 'DIMENSIONAMENTO' : 'ORÇAMENTO', W - M, y + 5, { align: 'right' });
+    doc.text(recibo ? 'RECIBO' : laudo ? 'LAUDO DE INSPEÇÃO' : entrega ? 'ENTREGA DA OBRA' : memorial ? 'DIMENSIONAMENTO' : 'ORÇAMENTO', W - M, y + 5, { align: 'right' });
     doc.setTextColor(20, 32, 41); doc.setFontSize(10);
-    doc.text(limpar(memorial || entrega ? `Ref. orçamento ${o.numero}` : o.numero), W - M, y + 11, { align: 'right' });
+    doc.text(limpar(outro ? `Ref. orçamento ${o.numero}` : o.numero), W - M, y + 11, { align: 'right' });
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(90, 100, 110);
-    if (entrega) {
+    if (recibo) {
+      doc.text(`Data: ${st.dataBR(recibo.data)}`, W - M, y + 16, { align: 'right' });
+    } else if (laudo) {
+      doc.text(`Data da inspeção: ${st.dataBR((o.inspecao || {}).data || st.hoje())}`, W - M, y + 16, { align: 'right' });
+    } else if (entrega) {
       doc.text(`Concluído em: ${st.dataBR(o.concluidoEm || st.hoje())}`, W - M, y + 16, { align: 'right' });
       if (o.dataInicio) doc.text(`Início: ${st.dataBR(o.dataInicio)}`, W - M, y + 20, { align: 'right' });
     } else if (memorial) {
@@ -136,7 +143,7 @@
     if (o.dataInicio) doc.text(`Início previsto: ${st.dataBR(o.dataInicio)}`, W - M, y + 24, { align: 'right' });
     }
 
-    y += o.dataInicio && !memorial && !entrega ? 31 : 28;
+    y += o.dataInicio && !outro ? 31 : 28;
     doc.setDrawColor(...corF); doc.setLineWidth(0.8); doc.line(M, y, W - M, y);
     y += 7;
 
@@ -168,7 +175,51 @@
     const novaPaginaSe = alt => { if (y + alt > H - 22) { doc.addPage(); y = M; } };
     const temDim = (o.circuitos || []).length > 0;
 
-    if (entrega) {
+    if (recibo) {
+      /* Recibo de pagamento */
+      const f = window.Extras ? window.Extras.financeiro(o) : { total: t.total, recebido: recibo.valor, saldo: 0 };
+      doc.setFillColor(...tintF2); doc.setDrawColor(...corF); doc.roundedRect(W - M - 70, y - 2, 70, 14, 2, 2, 'FD');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(20, 32, 41);
+      doc.text(st.brl(recibo.valor), W - M - 35, y + 7.5, { align: 'center' });
+      y += 22;
+      const txt = `Recebi de ${c.nome || 'cliente'}${c.documento ? ', CPF/CNPJ ' + c.documento : ''}, a importância de ${st.brl(recibo.valor)} (${extenso(recibo.valor)}), referente ${o.titulo ? 'a "' + o.titulo + '"' : 'aos serviços'} conforme o orçamento ${o.numero}, paga via ${String(recibo.forma || '').toLowerCase()} em ${st.dataBR(recibo.data)}${recibo.obs ? ' (' + recibo.obs + ')' : ''}.`;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(30, 40, 50);
+      const l = doc.splitTextToSize(limpar(txt), W - 2 * M);
+      doc.text(l, M, y, { lineHeightFactor: 1.5 }); y += l.length * 6.2 + 6;
+      doc.setFontSize(9); doc.setTextColor(70, 80, 90);
+      doc.text(`Valor total do serviço: ${st.brl(f.total)}   ·   Recebido até esta data: ${st.brl(f.recebido)}   ·   Saldo: ${st.brl(f.saldo)}`, M, y); y += 10;
+      const cid = e.cidade || '';
+      doc.setFontSize(10); doc.setTextColor(30, 40, 50);
+      doc.text(limpar(`${cid ? cid + ', ' : ''}${dataExtenso(recibo.data)}.`), M, y); y += 4;
+    } else if (laudo) {
+      /* Laudo de inspeção (NBR 5410, seção 7) */
+      const ins = o.inspecao || { itens: {} };
+      const RES = { ok: 'Conforme', nok: 'Não conforme', na: 'N/A' };
+      const corpo = [];
+      (window.Extras ? window.Extras.INSPECAO : []).forEach(g => {
+        corpo.push([{ content: limpar(g.grupo), colSpan: 4, styles: { fontStyle: 'bold', fillColor: tintF2, textColor: corT } }]);
+        g.itens.forEach(([k2, rot, un]) => { const v = ins.itens[k2] || {}; corpo.push([limpar(rot), { content: RES[v.res] || '-', styles: v.res === 'nok' ? { textColor: [180, 35, 24], fontStyle: 'bold' } : v.res === 'ok' ? { textColor: [6, 118, 71] } : {} }, limpar(v.med ? v.med + ' ' + (un || '') : ''), limpar(v.obs || '')]); });
+      });
+      doc.autoTable({
+        startY: y, margin: { left: M, right: M, bottom: 20 },
+        head: [['Item verificado', 'Resultado', 'Medição', 'Observação']], body: corpo,
+        styles: { font: 'helvetica', fontSize: 8, cellPadding: 1.8, textColor: [20, 32, 41], lineColor: [222, 228, 233], lineWidth: 0.1 },
+        headStyles: { fillColor: corF, textColor: sobreF, fontStyle: 'bold' },
+        columnStyles: { 1: { cellWidth: 24 }, 2: { cellWidth: 22 }, 3: { cellWidth: 48 } }
+      });
+      y = doc.lastAutoTable.finalY + 7;
+      const r = window.Extras.resultadoInspecao(ins);
+      novaPaginaSe(30);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...(r.nok ? [180, 35, 24] : [6, 118, 71]));
+      doc.text(r.nok ? `CONCLUSÃO: ${r.nok} NÃO CONFORMIDADE(S) ENCONTRADA(S)` : 'CONCLUSÃO: INSTALAÇÃO CONFORME NOS ITENS VERIFICADOS', M, y); y += 6;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(40, 50, 60);
+      const resp = [ins.resp && `Responsável: ${ins.resp}`, ins.registro && `Registro: ${ins.registro}`, ins.art && `ART/TRT: ${ins.art}`].filter(Boolean).join('   ·   ');
+      if (resp) { doc.text(limpar(resp), M, y); y += 5; }
+      if (ins.obs) { const l = doc.splitTextToSize(limpar('Observações: ' + ins.obs), W - 2 * M); novaPaginaSe(l.length * 4.2 + 4); doc.text(l, M, y); y += l.length * 4.2 + 2; }
+      doc.setFontSize(7.5); doc.setTextColor(110, 120, 130);
+      const nota = doc.splitTextToSize(limpar('Inspeção visual e ensaios realizados nos pontos acessíveis na data indicada, com base na ABNT NBR 5410 (verificação final). Não substitui projeto elétrico nem ART quando exigidos.'), W - 2 * M);
+      doc.text(nota, M, y + 2); y += nota.length * 3.6 + 2;
+    } else if (entrega) {
       /* Serviços executados (sem valores) */
       doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...corT);
       doc.text('SERVIÇOS E MATERIAIS', M, y); y += 2;
@@ -192,7 +243,7 @@
         doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 50, 60); doc.text(l, M, y + 5);
         y += 8 + l.length * 4.2;
       };
-      sec('GARANTIA', o.garantia);
+      sec('GARANTIA', [o.garantia, window.Extras && o.concluidoEm ? `Válida até ${st.dataBR(window.Extras.garantiaAte(o))}.` : ''].filter(x => String(x || '').trim()).join(' '));
       /* Documentos entregues */
       const docs = (o.anexos || []).filter(a => a.entregar !== false);
       const extras = [];
@@ -291,6 +342,31 @@
     doc.text('TOTAL', xl, y + 6.2); doc.text(st.brl(t.total), xr - 1, y + 6.2, { align: 'right' });
     y += 17;
 
+    /* Pix (QR Code e copia e cola) */
+    if (e.pixChave && o.pixNoPdf !== false && window.Pix && window.Extras) {
+      const f = window.Extras.financeiro(o);
+      const valor = f.sinalPct > 0 ? f.sinal : t.total;
+      let cod = '';
+      try { cod = window.Pix.codigo({ chave: e.pixChave, nome: e.pixNome || e.nome, cidade: e.pixCidade || e.cidade, valor, txid: String(o.numero).replace(/[^A-Za-z0-9]/g, '') }); } catch (er) { cod = ''; }
+      if (cod) {
+        novaPaginaSe(46);
+        doc.setFillColor(...tintF2); doc.setDrawColor(...corF); doc.setLineWidth(0.3);
+        doc.roundedRect(M, y, W - 2 * M, 40, 2, 2, 'FD');
+        window.Pix.desenharPDF(doc, cod, M + 3, y + 3, 34);
+        const xt = M + 41, wt = W - 2 * M - 45;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...corT);
+        doc.text('PAGAMENTO VIA PIX', xt, y + 7);
+        doc.setFontSize(10.5); doc.setTextColor(20, 32, 41);
+        doc.text(limpar(f.sinalPct > 0 ? `Sinal de ${st.dec(f.sinalPct, 0)}% na aprovação: ${st.brl(valor)}` : `Valor: ${st.brl(valor)}`), xt, y + 13);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(70, 80, 90);
+        doc.text(limpar(`Chave: ${e.pixChave} · ${e.pixNome || e.nome || ''}`), xt, y + 18);
+        doc.setFontSize(6.6); doc.setTextColor(90, 100, 110);
+        doc.text('Pix copia e cola:', xt, y + 23);
+        doc.text(doc.splitTextToSize(cod, wt), xt, y + 26.5);
+        y += 47;
+      }
+    }
+
     /* Condições */
     const secoes = [
       ['Prazo de execução', o.prazo],
@@ -325,19 +401,27 @@
         doc.addImage(e.assinatura, 'PNG', M + (colW - w) / 2, yLinha - h - 0.5, w, h);
       } catch (err) { /* assinatura inválida: segue sem ela */ }
     }
+    const ac = o.assinaturaCliente && (entrega || laudo) ? o.assinaturaCliente : null;
+    if (ac && ac.img) {
+      try {
+        const pr = doc.getImageProperties(ac.img);
+        const r = Math.min(60 / pr.width, 19 / pr.height);
+        doc.addImage(ac.img, 'PNG', xCli + (colW - pr.width * r) / 2, yLinha - pr.height * r - 0.5, pr.width * r, pr.height * r);
+      } catch (err) { /* sem imagem */ }
+    }
     doc.setDrawColor(150, 160, 170); doc.setLineWidth(0.3);
     doc.line(M, yLinha, M + colW, yLinha);
-    doc.line(xCli, yLinha, xCli + colW, yLinha);
+    if (!recibo) doc.line(xCli, yLinha, xCli + colW, yLinha);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(40, 50, 60);
     doc.text(limpar(e.assinaturaNome || e.nome || 'Responsável'), M + colW / 2, yLinha + 4.5, { align: 'center' });
-    doc.text(limpar(c.nome || 'Cliente'), xCli + colW / 2, yLinha + 4.5, { align: 'center' });
+    if (!recibo) doc.text(limpar((ac && ac.nome) || c.nome || 'Cliente'), xCli + colW / 2, yLinha + 4.5, { align: 'center' });
     doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(110, 120, 130);
     doc.text(limpar(e.assinaturaNome && e.nome && e.assinaturaNome !== e.nome ? e.nome : 'Responsável'), M + colW / 2, yLinha + 8.5, { align: 'center' });
-    doc.text(`${entrega ? 'Recebido pelo cliente' : memorial ? 'De acordo do cliente' : 'Aceite do cliente'}   Data: ____/____/______`, xCli + colW / 2, yLinha + 8.5, { align: 'center' });
+    if (!recibo) doc.text(`${laudo ? 'Ciente do cliente' : entrega ? 'Recebido pelo cliente' : memorial ? 'De acordo do cliente' : 'Aceite do cliente'}   Data: ${ac ? st.dataBR(ac.data) : '____/____/______'}`, xCli + colW / 2, yLinha + 8.5, { align: 'center' });
 
     /* Entrega: anexos em páginas próprias (dimensionamento, desenhos e fotos) */
-    if (entrega) {
-      if ((o.circuitos || []).length) { doc.addPage(); y = M; secaoDimensionamento(doc, o, y, k); }
+    if (entrega || laudo) {
+      if (entrega && (o.circuitos || []).length) { doc.addPage(); y = M; secaoDimensionamento(doc, o, y, k); }
       (opc.imagens || []).forEach(im => {
         try {
           const pr = doc.getImageProperties(im.dataUrl);
@@ -360,7 +444,7 @@
       doc.setPage(p);
       doc.setFontSize(7.5); doc.setTextColor(140, 150, 160); doc.setFont('helvetica', 'normal');
       const PW = doc.internal.pageSize.getWidth(), PH = doc.internal.pageSize.getHeight();
-      doc.text(limpar(`${entrega ? 'Entrega da obra · ' : memorial ? 'Dimensionamento · ' : ''}${o.numero} · ${e.nome || ''}`), M, PH - 8);
+      doc.text(limpar(`${recibo ? 'Recibo · ' : laudo ? 'Laudo · ' : entrega ? 'Entrega da obra · ' : memorial ? 'Dimensionamento · ' : ''}${o.numero} · ${e.nome || ''}`), M, PH - 8);
       doc.text(`Página ${p} de ${total}`, PW - M, PH - 8, { align: 'right' });
     }
     return doc.output('blob');
@@ -370,7 +454,39 @@
   const nomeMemorial = o => `Dimensionamento-${String(o.numero).replace(/[^\w-]/g, '')}.pdf`;
   const gerarMemorial = o => gerar(o, { memorial: true });
   const gerarEntrega = (o, imagens) => gerar(o, { entrega: true, imagens });
+  const gerarRecibo = (o, pagamento) => gerar(o, { recibo: pagamento });
+  const gerarLaudo = (o, fotos) => gerar(o, { laudo: true, imagens: fotos });
+
+  /* Valor por extenso (reais e centavos) e data por extenso, para o recibo */
+  function extenso(v) {
+    const U = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
+    const D = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
+    const C = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+    const ate999 = n => {
+      if (n === 100) return 'cem';
+      const c = Math.floor(n / 100), r = n % 100, p = [];
+      if (c) p.push(C[c]);
+      if (r) p.push(r < 20 ? U[r] : D[Math.floor(r / 10)] + (r % 10 ? ' e ' + U[r % 10] : ''));
+      return p.join(' e ');
+    };
+    const inteiro = n => {
+      if (n === 0) return 'zero';
+      const mi = Math.floor(n / 1e6), mil = Math.floor((n % 1e6) / 1000), r = n % 1000, p = [];
+      if (mi) p.push(mi === 1 ? 'um milhão' : ate999(mi) + ' milhões');
+      if (mil) p.push(mil === 1 ? 'mil' : ate999(mil) + ' mil');
+      if (r) p.push(ate999(r));
+      // "mil e cem", "mil e cinquenta", mas "mil duzentos e cinquenta"
+      return p.length > 1 && r && (r < 100 || r % 100 === 0) ? p.slice(0, -1).join(' ') + ' e ' + p[p.length - 1] : p.join(' ');
+    };
+    const reais = Math.floor(Math.round(v * 100) / 100), cent = Math.round((v - reais) * 100);
+    const partes = [];
+    if (reais) partes.push(inteiro(reais) + (reais === 1 ? ' real' : (reais % 1e6 === 0 ? ' de reais' : ' reais')));
+    if (cent) partes.push(inteiro(cent) + (cent === 1 ? ' centavo' : ' centavos'));
+    return partes.join(' e ') || 'zero real';
+  }
+  const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  const dataExtenso = iso => { const [a, m, d] = String(iso).slice(0, 10).split('-'); return `${Number(d)} de ${MESES[Number(m) - 1]} de ${a}`; };
   const nomeEntrega = o => `Entrega-${String(o.numero).replace(/[^\w-]/g, '')}.pdf`;
 
-  window.PDF = { gerar, nomeArquivo, gerarMemorial, nomeMemorial, gerarEntrega, nomeEntrega };
+  window.PDF = { gerar, nomeArquivo, gerarMemorial, nomeMemorial, gerarEntrega, nomeEntrega, gerarRecibo, gerarLaudo, extenso };
 })();

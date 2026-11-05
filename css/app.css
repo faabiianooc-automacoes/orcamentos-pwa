@@ -397,3 +397,15 @@ body.sem-rolagem { overflow: hidden; }
 .desl-km { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .desl-km .muted { font-size: 13px; font-weight: 500; }
 .desl-val { font-size: 18px; font-weight: 700; color: var(--primary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* Recursos extras */
+.pend-l { gap: 8px !important; padding-right: 8px !important; }
+.pend-l a.principal { color: inherit; text-decoration: none; }
+.pend-l .t2 { white-space: normal !important; }
+.tx-ok { color: var(--ok); }
+.chip.ins-ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+.chip.ins-nok { background: var(--danger); border-color: var(--danger); color: #fff; }
+.chip.ins-na { background: var(--muted); border-color: var(--muted); color: #fff; }
+.ins-l { align-items: flex-start !important; }
+.assin-pad { width: 100%; height: auto; aspect-ratio: 600 / 220; background: #fff; border: 1px dashed var(--line); border-radius: 10px; touch-action: none; display: block; }
+.campo.c1 { grid-column: span 1; }

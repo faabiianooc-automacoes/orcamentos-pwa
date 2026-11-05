@@ -11,6 +11,10 @@ App instalável (PWA) para cadastrar clientes, montar orçamentos, gerar o PDF e
 - **Desenhos e anexos:** editor draw.io integrado (desenho livre ou unifilar gerado a partir do dimensionamento), arquivos de outros programas (PDF, DWG, DXF, fotos) e links (ex.: Tinkercad). Os arquivos ficam no aparelho.
 - **Multifilar colorido e símbolos de planta:** o app gera o multifilar do quadro com as fases equilibradas e as cores dos condutores, e o draw.io abre com a biblioteca de símbolos de planta (tomadas, interruptores, pontos de luz) para marcar os pontos sobre a planta do cômodo.
 - **Entrega da obra:** ao concluir, termo de entrega em PDF com desenhos, fotos e dimensionamento, mais os arquivos e links, enviados ao cliente pelo WhatsApp.
+- **Financeiro:** Pix com QR Code no PDF, sinal, registro de pagamentos, recibo, saldo a receber, custo, lucro e margem.
+- **Pendências e pós-venda:** lembretes no Início (sinal, sem resposta, saldo, entrega, garantia, revisão preventiva, avaliação no Google) com mensagem pronta.
+- **Técnico:** previsão de cargas (NBR 5410), lista de materiais do dimensionamento, ferramentas e aluguel, calculadoras de campo, inspeção com laudo em PDF e assinatura do cliente no celular.
+- **Fotos do serviço:** antes/depois no orçamento e envio para um álbum no Google Fotos (GOOGLE-FOTOS.md).
 - **Relatórios:** filtros por período (este mês, mês passado, 30/90 dias, ano, próximos 7/30 dias ou datas livres), pela data de emissão, início previsto ou validade, por status, cliente e busca. Mostra totais, taxa de aprovação, ticket médio, valores por status, por tipo de item e principais clientes; exporta a lista em planilha (CSV).
 - **Verificação antes de enviar:** o app lista o que falta (cliente, telefone, itens sem valor, condições de pagamento etc.).
 - **PDF:** A4 com logo, dados da empresa e do cliente, tabela de itens, totais, condições, rubrica automática do responsável e campo de aceite do cliente.

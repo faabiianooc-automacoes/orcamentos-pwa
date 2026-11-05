@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.14.0] - 2026-11-05
+- Pix: chave em Ajustes; QR Code e "copia e cola" no PDF do orçamento (valor do sinal ou total), gerado no aparelho no padrão do Banco Central.
+- Pagamentos no orçamento: sinal (%), registro de pagamentos (valor, data, forma), saldo a receber, recibo em PDF com valor por extenso, botão para cobrar sinal/saldo pelo WhatsApp com o Pix.
+- Margem e lucro: custo unitário nos itens e no catálogo (só você vê), custo total, lucro, margem e alerta abaixo da margem mínima.
+- Pendências no Início: sinal pendente, orçamento sem resposta há 3 dias, saldo a receber, entrega não enviada, garantia acabando, revisão preventiva (após X meses) e pedido de avaliação no Google, com mensagem pronta no WhatsApp e opção de dispensar. Novos indicadores: a receber e recebido no mês.
+- Garantia: data de validade no termo de entrega (Ajustes → dias de garantia).
+- Assinatura do cliente no celular (termo de entrega e laudo); pedido de avaliação no Google após a entrega.
+- Ferramentas e kits: desgaste das ferramentas próprias por hora de uso e aluguel por diária, kits por tipo de serviço (ex.: instalação de quadro geral); no orçamento entra só no custo ou como item.
+- Previsão de cargas (NBR 5410:2004, 9.5.2): cômodos com medidas, mínimos de iluminação e tomadas, equipamentos de uso específico e sugestão de circuitos criados no dimensionamento.
+- Lista de materiais automática a partir do dimensionamento: cabos por seção e cor (com sobra), disjuntores, DR, DPS e disjuntor geral, com preços do catálogo.
+- Inspeção e laudo: checklist de verificação final (NBR 5410, seção 7) com medições e observações, laudo em PDF com fotos, conclusão e assinaturas.
+- Calculadoras de campo: corrente, queda de tensão, conversões (CV, HP, kVA, BTU/h) e lei de Ohm.
+- Fotos do serviço (antes, durante, depois), reduzidas para economizar espaço, e envio para um álbum por orçamento no Google Fotos (ver GOOGLE-FOTOS.md); alternativa por compartilhamento.
+- Relatórios: recebido e lucro estimado.
+
 ## [1.13.0] - 2026-11-04
 - Deslocamento no orçamento: calcula a distância de carro do endereço da empresa até o do cliente (OpenStreetMap: Nominatim para localizar os endereços e OSRM para a rota; gratuitos, sem chave; precisa de internet) e lança o item "Deslocamento (X km ida e volta)" no orçamento, que aparece no PDF e soma no total.
 - Ajustes → Deslocamento: valor por km (padrão R$ 2,50), cobrar ida e volta, conferir o ponto de partida no mapa ou usar a localização atual do aparelho.
