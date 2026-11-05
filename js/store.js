@@ -9,7 +9,7 @@
 
   const STATUS = ['Rascunho', 'Enviado', 'Aprovado', 'Concluído', 'Recusado'];
   const TIPOS_ITEM = ['Material', 'Serviço', 'Mão de obra'];
-  const UNIDADES = ['un', 'ponto', 'circuito', 'h', 'm', 'm²', 'kit', 'mês', 'vb'];
+  const UNIDADES = ['un', 'ponto', 'circuito', 'h', 'm', 'm²', 'kit', 'mês', 'vb', 'km'];
   const CP = window.CatalogoPadrao;
   const GRUPOS = CP.GRUPOS;
   const TIPOS_IMOVEL = ['Casa', 'Apartamento', 'Comercial', 'Condomínio', 'Outro'];
@@ -51,6 +51,7 @@
         logo: '', corTexto: '#0f766e', corFundo: '#0f766e',
         assinatura: '', assinaturaNome: '', assinarAuto: true, rubricaTexto: '', rubricaEstilo: '',
         prefixo: 'ORC', validadeDias: 15, tecNoPdf: true,
+        deslocValorKm: 2.5, deslocIdaVolta: true, origem: null, // deslocamento (js/rotas.js)
         prazoPadrao: '', pagamentoPadrao: '', garantiaPadrao: '', observacoesPadrao: '',
         mensagemPadrao: 'Olá, {cliente}! Segue o orçamento {numero} no valor de {total}, válido até {validade}. Qualquer dúvida, estou à disposição.\n{empresa}'
       },
@@ -544,6 +545,24 @@
     return { porCircuito: res, carga, avisos, alimentacao: al, vFN, vFF };
   }
 
+  /* ---------- Deslocamento ----------
+     o.deslocamento = { kmIda, idaVolta, valorKm, minutos, manual, calculadoEm }
+     Vira um item do orçamento (desloc: true), que aparece no PDF e soma no total. */
+  function aplicarDeslocamento(o, d) {
+    o.itens = o.itens || [];
+    const i = o.itens.findIndex(x => x.desloc);
+    if (!d) { if (i >= 0) o.itens.splice(i, 1); delete o.deslocamento; return; }
+    const kmIda = Math.round(num(d.kmIda) * 10) / 10;
+    const total = Math.round(kmIda * (d.idaVolta ? 2 : 1) * 10) / 10;
+    o.deslocamento = { ...d, kmIda };
+    const item = {
+      id: i >= 0 ? o.itens[i].id : uid(), desloc: true, tipo: 'Serviço', unidade: 'km',
+      descricao: `Deslocamento (${dec(kmIda, 1)} km${d.idaVolta ? ' ida e volta' : ''})`,
+      qtd: total, valor: num(d.valorKm)
+    };
+    if (i >= 0) o.itens[i] = item; else o.itens.push(item);
+  }
+
   /* ---------- Backup ---------- */
   const exportar = () => JSON.stringify({ app: 'orcamentos-pwa', exportadoEm: new Date().toISOString(), dados: db }, null, 2);
   function importar(texto) {
@@ -572,7 +591,7 @@
     totais, validadeAte, diasEntre, agenda, statusExibido, pendencias,
     salvarItemCatalogo, excluirItemCatalogo, salvarEmpresa,
     modeloDim, salvarModeloDim, restaurarModeloDim, calcularCircuito,
-    alimentacao, fasesDisponiveis, opcoesLigacao, ligacoes, potenciaCircuito,
+    alimentacao, fasesDisponiveis, opcoesLigacao, ligacoes, potenciaCircuito, aplicarDeslocamento,
     exportar, importar, marcarBackup, ultimoBackup, temDados, resetar,
     // nuvem
     set aoAlterar(fn) { aoAlterar = fn || (() => {}); },

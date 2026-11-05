@@ -391,3 +391,9 @@ details.tec summary .muted { margin-left: auto; font-weight: 400; font-size: 12.
 body.sem-rolagem { overflow: hidden; }
 .acoes .btn svg { flex: none; }
 .lig { font-weight: 600; font-size: 11.5px; color: var(--primary); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; margin-right: 4px; white-space: nowrap; }
+
+/* Deslocamento */
+.desl-res { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+.desl-km { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.desl-km .muted { font-size: 13px; font-weight: 500; }
+.desl-val { font-size: 18px; font-weight: 700; color: var(--primary); white-space: nowrap; font-variant-numeric: tabular-nums; }

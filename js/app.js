@@ -352,6 +352,9 @@
       <p class="ajuda"><b>Planta com pontos:</b> escolha a foto ou imagem da planta do cômodo; ela abre como fundo travado e você marca tomadas, interruptores e pontos de luz com a biblioteca <b>simbolos-planta</b> (<a href="drawio/simbolos-planta.xml" download>baixar biblioteca</a>).</p>
       <p class="ajuda">Desenhos no editor draw.io (precisa de internet), arquivos de outros programas (PDF, DWG, DXF, fotos) e links (ex.: Tinkercad). Os marcados com "Entregar" vão para o cliente na entrega da obra. Os arquivos ficam guardados neste aparelho.</p>
 
+      <h2>Deslocamento</h2>
+      <div class="card" id="desl"></div>
+
       <h2>Valores</h2>
       <div class="card">
         <div class="campos">
@@ -387,7 +390,7 @@
       }
       elItens.innerHTML = o.itens.map((it, i) => `
         <div class="item ${st.num(it.valor) <= 0 ? 'sem-valor' : ''}" data-idx="${i}">
-          <div class="item-topo"><span class="n">ITEM ${i + 1}</span>
+          <div class="item-topo"><span class="n">ITEM ${i + 1}${it.desloc ? ' · DESLOCAMENTO' : ''}</span>
             <span class="row" style="gap:4px">${it.tipo === 'Material' || it.tec ? `<button class="btn btn-peq" type="button" data-acao="tec">${ICON.cabo} ${it.tec ? 'Especificação' : 'Especificar'}</button>` : ''}
             <button class="icon-btn" data-acao="rem" aria-label="Remover item ${i + 1}">${ICON.lixo}</button></span></div>
           ${it.tec ? `<div class="item-tec" data-acao="tec">${esc(TEC.resumo(it.tec) || TEC.classe(it.tec.classe).nome)}</div>` : ''}
@@ -600,6 +603,79 @@
       if (abrir) window.WhatsApp.abrirConversa(c.telefone, msg);
     }
 
+    /* Deslocamento: rota de carro da empresa até o cliente (js/rotas.js) */
+    const R = window.Rotas;
+    function desenharDeslocamento() {
+      const d = o.deslocamento, e = st.db.empresa;
+      const vkm = st.num(e.deslocValorKm) || 2.5;
+      const it = (o.itens || []).find(x => x.desloc);
+      app.querySelector('#desl').innerHTML = d && it ? `
+        <div class="desl-res"><div><div class="desl-km">${st.dec(d.kmIda, 1)} km <span class="muted">${d.idaVolta ? '× 2 (ida e volta)' : 'só ida'}</span></div>
+          <div class="ajuda" style="margin:2px 0 0">${d.manual ? 'Distância informada à mão' : `Trajeto de carro${d.minutos ? ` · cerca de ${d.minutos} min` : ''}`} · ${st.dec(st.num(it.qtd), 1)} km × ${st.brl(it.valor)}</div></div>
+          <div class="desl-val">${st.brl(st.num(it.qtd) * st.num(it.valor))}</div></div>
+        ${d.link ? `<a class="ajuda" href="${esc(d.link)}" target="_blank" rel="noopener">Ver o trajeto no mapa</a>` : ''}
+        <div class="acoes" style="margin-top:10px">
+          <button class="btn" type="button" data-dl="calc">${ICON.relogio} Recalcular</button>
+          <button class="btn" type="button" data-dl="km">Editar km</button>
+          <button class="btn perigo" type="button" data-dl="rem">${ICON.lixo} Remover</button></div>`
+        : `<p class="ajuda" style="margin-top:0">Calcula a distância de carro do seu endereço até o do cliente e cobra ${st.brl(vkm)} por km${e.deslocIdaVolta !== false ? ', ida e volta' : ''} (ajuste em Ajustes → Deslocamento).</p>
+        <div class="acoes" style="margin-top:0">
+          <button class="btn prim" type="button" data-dl="calc">${ICON.relogio} Calcular trajeto</button>
+          <button class="btn" type="button" data-dl="km">Informar km</button></div>`;
+    }
+    async function origemEmpresa() {
+      const e = st.db.empresa;
+      const end = R.textoEndereco(e.endereco, e.cidade);
+      if (e.origem && (e.origem.manual || e.origem.end === end)) return e.origem;
+      if (!end) throw new Error('Cadastre o endereço da sua empresa em Ajustes (ou use "Usar minha localização atual" em Ajustes → Deslocamento).');
+      const g = await R.geocodificar(e.endereco, e.cidade);
+      const origem = { ...g, end };
+      st.salvarEmpresa({ origem });
+      return origem;
+    }
+    async function destinoCliente(c) {
+      const end = R.textoEndereco(c.endereco, c.cidade);
+      if (!end) throw new Error(`Cadastre o endereço de ${c.nome} (rua, número, bairro e cidade/UF).`);
+      if (c.geo && c.geo.end === end) return c.geo;
+      const g = await R.geocodificar(c.endereco, c.cidade);
+      c.geo = { ...g, end }; st.salvarCliente(c);
+      return c.geo;
+    }
+    async function informarKm(atual) {
+      let km = null;
+      await dialogo({
+        titulo: 'Distância até o cliente',
+        corpo: `<div class="campo"><label for="dl-km">Distância só de ida (km)</label><input id="dl-km" class="num" inputmode="decimal" value="${atual ? esc(st.dec(atual, 1)) : ''}" placeholder="Ex.: 12,5"></div>`,
+        acoes: [{ rotulo: 'Cancelar', valor: null }, { rotulo: 'OK', classe: 'prim', valor: 'ok', antes: d => { km = st.num(d.querySelector('#dl-km').value); if (!(km > 0)) { d.querySelector('#dl-km').classList.add('invalido'); return false; } } }],
+        aoAbrir: d => d.querySelector('#dl-km').focus()
+      });
+      return km;
+    }
+    function lancarDeslocamento(d) {
+      const e = st.db.empresa;
+      st.aplicarDeslocamento(o, { idaVolta: e.deslocIdaVolta !== false, valorKm: st.num(e.deslocValorKm) || 2.5, calculadoEm: new Date().toISOString(), ...d });
+      desenharItens(); desenharDeslocamento(); atualizarTotais(); agendarSalvar();
+    }
+    app.querySelector('#desl').addEventListener('click', async ev => {
+      const b = ev.target.closest('[data-dl]'); if (!b) return;
+      if (b.dataset.dl === 'rem') { st.aplicarDeslocamento(o, null); desenharItens(); desenharDeslocamento(); atualizarTotais(); agendarSalvar(); return; }
+      if (b.dataset.dl === 'km') { const km = await informarKm(o.deslocamento && o.deslocamento.kmIda); if (km) lancarDeslocamento({ kmIda: km, manual: true, minutos: 0, link: '' }); return; }
+      const c = st.cliente(o.clienteId);
+      if (!c) { toast('Escolha o cliente do orçamento.'); return; }
+      if (!navigator.onLine) { toast('Sem internet: use "Informar km".'); return; }
+      b.disabled = true; const txt = b.innerHTML; b.textContent = 'Calculando…';
+      try {
+        const [orig, dest] = [await origemEmpresa(), await destinoCliente(c)];
+        const r = await R.rota(orig, dest);
+        lancarDeslocamento({ kmIda: r.km, minutos: r.minutos, manual: false, link: R.linkMapa(orig, dest), destino: dest.nome });
+        toast(`Trajeto: ${st.dec(r.km, 1)} km até ${c.nome.split(' ')[0]}.`);
+      } catch (err) {
+        b.disabled = false; b.innerHTML = txt;
+        const ir = await dialogo({ titulo: 'Não foi possível calcular', corpo: `<p style="margin-top:0">${esc(err.message || err)}</p>`, acoes: [{ rotulo: 'Fechar', valor: null }, { rotulo: 'Informar km', classe: 'prim', valor: 'km' }] });
+        if (ir === 'km') { const km = await informarKm(); if (km) lancarDeslocamento({ kmIda: km, manual: true, minutos: 0, link: '' }); }
+      }
+    });
+
     function atualizarTotais() {
       const t = st.totais(o);
       app.querySelector('#tot').textContent = st.brl(t.total);
@@ -685,7 +761,8 @@
       const it = o.itens[i];
       if (it.descricao && !(await confirmar('Remover item', `Remover "${esc(it.descricao)}"?`, 'Remover', 'prim'))) return;
       o.itens.splice(i, 1);
-      desenharItens(); atualizarTotais(); agendarSalvar();
+      if (it.desloc) delete o.deslocamento;
+      desenharItens(); desenharDeslocamento(); atualizarTotais(); agendarSalvar();
     });
 
     app.querySelector('#add-item').onclick = () => {
@@ -879,7 +956,7 @@
       if (st.orcamentoVazio(o)) st.excluirOrcamento(o.id); else if (sujo) st.salvarOrcamento(o);
     };
 
-    desenharItens(); desenharCircuitos(); desenharAnexos(); atualizarTotais(); atualizarPendencias();
+    desenharItens(); desenharCircuitos(); desenharAnexos(); desenharDeslocamento(); atualizarTotais(); atualizarPendencias();
   }
 
   /* ---------- Dimensionamento (NBR 5410) ----------
@@ -1672,6 +1749,15 @@
         <div class="campo"><label for="a-nome">Nome abaixo da assinatura</label><input id="a-nome" data-f="assinaturaNome" value="${esc(e.assinaturaNome)}" placeholder="${esc(e.nome || 'Ex.: seu nome completo')}"><span class="ajuda">Em branco, usa o nome da empresa.</span></div>
       </div></div>
 
+      <h2>Deslocamento</h2>
+      <div class="card" id="desl-cfg"><div class="campos">
+        <div class="campo c3 m3"><label for="d-vkm">Valor por km (R$)</label><input id="d-vkm" class="num" inputmode="decimal" data-f="deslocValorKm" value="${esc(st.dec(st.num(e.deslocValorKm) || 2.5))}"></div>
+        <div class="campo c3 m3" style="justify-content:flex-end"><label class="check"><input type="checkbox" data-f="deslocIdaVolta" ${e.deslocIdaVolta !== false ? 'checked' : ''}> Cobrar ida e volta</label></div>
+        <div class="campo"><span class="label">Ponto de partida</span>
+          <p class="ajuda" id="d-orig" style="margin:2px 0 6px">${e.origem ? esc(e.origem.manual ? 'Localização do aparelho (fixada)' : e.origem.nome) : 'Endereço da empresa (acima). Será localizado no mapa no primeiro cálculo.'}</p>
+          <div class="acoes" style="margin-top:0"><button class="btn" type="button" id="d-conf">Conferir no mapa</button><button class="btn" type="button" id="d-gps">Usar minha localização atual</button></div></div>
+      </div></div>
+
       <h2>Padrões dos novos orçamentos</h2>
       <div class="card" id="pad"><div class="campos">
         <div class="campo c3 m3"><label for="p-pre">Prefixo do número</label><input id="p-pre" data-f="prefixo" value="${esc(e.prefixo)}" maxlength="8"><span class="ajuda">Ex.: ${esc(e.prefixo || 'ORC')}-${new Date().getFullYear()}-0001</span></div>
@@ -1705,11 +1791,12 @@
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.12.0</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.13.0</p>`;
 
     // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {
-      const dados = { ...lerCampos(app.querySelector('#emp')), ...lerCampos(app.querySelector('#cores')), ...lerCampos(app.querySelector('#assin')), ...lerCampos(app.querySelector('#pad')) };
+      const dados = { ...lerCampos(app.querySelector('#emp')), ...lerCampos(app.querySelector('#cores')), ...lerCampos(app.querySelector('#assin')), ...lerCampos(app.querySelector('#pad')), ...lerCampos(app.querySelector('#desl-cfg')) };
+      dados.deslocValorKm = st.num(dados.deslocValorKm) || 2.5;
       dados.telefone = st.soDigitos(dados.telefone);
       dados.validadeDias = parseInt(dados.validadeDias, 10) || 15;
       const mudou = Object.keys(dados).some(k => String(dados[k]) !== String(st.db.empresa[k] == null ? '' : st.db.empresa[k]));
@@ -1720,6 +1807,27 @@
     const pararNuvem = window.Nuvem ? window.Nuvem.aoMudarEstado(() => desenharNuvem(app.querySelector('#nuvem'))) : () => {};
     limparTela = () => { clearTimeout(t); salvarEmpresa(); pararNuvem(); };
     desenharNuvem(app.querySelector('#nuvem'));
+    // Ponto de partida do deslocamento
+    const dOrig = app.querySelector('#d-orig');
+    app.querySelector('#d-conf').onclick = async () => {
+      salvarEmpresa();
+      const e2 = st.db.empresa;
+      if (!window.Rotas.textoEndereco(e2.endereco, e2.cidade)) { toast('Preencha o endereço e a cidade da empresa acima.'); return; }
+      dOrig.textContent = 'Procurando no mapa…';
+      try {
+        const g = await window.Rotas.geocodificar(e2.endereco, e2.cidade);
+        st.salvarEmpresa({ origem: { ...g, end: window.Rotas.textoEndereco(e2.endereco, e2.cidade) } });
+        dOrig.innerHTML = `${esc(g.nome)} · <a href="https://www.google.com/maps?q=${g.lat},${g.lon}" target="_blank" rel="noopener">ver no mapa</a>`;
+      } catch (err) { dOrig.textContent = err.message || String(err); }
+    };
+    app.querySelector('#d-gps').onclick = async () => {
+      dOrig.textContent = 'Obtendo localização…';
+      try {
+        const g = await window.Rotas.minhaPosicao();
+        st.salvarEmpresa({ origem: { ...g, manual: true } });
+        dOrig.innerHTML = `Localização do aparelho (fixada) · <a href="https://www.google.com/maps?q=${g.lat},${g.lon}" target="_blank" rel="noopener">ver no mapa</a>. Para voltar ao endereço da empresa, toque em "Conferir no mapa".`;
+      } catch (err) { dOrig.textContent = err.message || String(err); }
+    };
 
     // Prévia das duas cores e aviso de contraste
     const corT = app.querySelector('#e-cor-t'), corF = app.querySelector('#e-cor-f');

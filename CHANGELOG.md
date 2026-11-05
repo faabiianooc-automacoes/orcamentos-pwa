@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0] - 2026-11-04
+- Deslocamento no orçamento: calcula a distância de carro do endereço da empresa até o do cliente (OpenStreetMap: Nominatim para localizar os endereços e OSRM para a rota; gratuitos, sem chave; precisa de internet) e lança o item "Deslocamento (X km ida e volta)" no orçamento, que aparece no PDF e soma no total.
+- Ajustes → Deslocamento: valor por km (padrão R$ 2,50), cobrar ida e volta, conferir o ponto de partida no mapa ou usar a localização atual do aparelho.
+- Link para ver o trajeto no Google Maps; se o endereço não for encontrado, dá para informar o km à mão.
+- As coordenadas da empresa e de cada cliente ficam guardadas (só consulta o mapa de novo se o endereço mudar).
+- Unidade "km" nos itens.
+
 ## [1.12.0] - 2026-11-04
 - Alimentação do quadro no orçamento (mono, bi ou trifásica; 127/220 ou 220/380 V; disjuntor geral).
 - Ligação de cada circuito (F1+N, F1+F2, F1+F2+F3...): automática, equilibrando a carga entre as fases, ou escolhida à mão. Mostra a carga por fase e avisa ligações incompatíveis com a alimentação.
