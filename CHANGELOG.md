@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.15.2] - 2026-11-05
+- Multifilar/unifilar automático: se o orçamento já tem o diagrama, oferece "Atualizar" (refaz com os circuitos atuais) ou "Criar outro". A lista de anexos mostra quantos circuitos o diagrama tem e avisa "desatualizado" quando os circuitos mudaram.
+
 ## [1.15.1] - 2026-11-05
 - Visual completo na paleta da marca: botões secundários pretos (ícone amarelo) e principais amarelos (texto preto), títulos de seção com marcador amarelo, ícones em círculos amarelos com desenho preto, cartões e indicadores com faixa amarela, cabeçalho preto nas janelas, chips e caixas de seleção amarelos, avisos no tom amarelo.
 

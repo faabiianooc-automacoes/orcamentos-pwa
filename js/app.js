@@ -469,7 +469,7 @@
     function desenharAnexos() {
       const L = o.anexos || [];
       const ic = a => a.tipo === 'link' ? ICON.link : a.tipo === 'desenho' ? ICON.desenho : A.ehImagem(a.mime) ? ICON.doc : ICON.clipe;
-      const det = a => a.tipo === 'link' ? (a.url || '').replace(/^https?:\/\//, '') : `${a.tipo === 'desenho' ? 'Desenho' : (a.nome.split('.').pop() || '').toUpperCase()} · ${A.tamanhoFmt(a.tamanho)}${a.gfotos ? ' · no Google Fotos ✓' : ''}`;
+      const det = a => a.tipo === 'link' ? (a.url || '').replace(/^https?:\/\//, '') : `${a.tipo === 'desenho' ? 'Desenho' : (a.nome.split('.').pop() || '').toUpperCase()} · ${A.tamanhoFmt(a.tamanho)}${a.gfotos ? ' · no Google Fotos ✓' : ''}${a.gerado ? ` · ${a.circuitos} circuito(s)${a.circuitos !== (o.circuitos || []).length ? ' · desatualizado' : ''}` : ''}`;
       app.querySelector('#anx').innerHTML = L.length ? `<div class="lista">${L.map((a, i) => `
         <div class="linha anx-l"><button class="anx-abrir" type="button" data-anx="${i}"><span class="ag-ic ok">${ic(a)}</span>
           <div class="principal"><div class="t1">${esc(a.nome)}</div><div class="t2">${esc(det(a))}</div></div></button>
@@ -503,14 +503,30 @@
       const nome = await pedirTexto('Planta com pontos', 'Nome do desenho', 'Planta - ' + (o.titulo || 'pontos elétricos'));
       if (nome) editarDesenho({ xml: await A.plantaXml(f, nome) }, nome);
     });
-    app.querySelector('#anx-multi').onclick = () => {
-      if (!(o.circuitos || []).length) { toast('Adicione circuitos no dimensionamento primeiro.'); return; }
-      editarDesenho({ xml: A.gerarMultifilarXml(o) }, 'Diagrama multifilar');
-    };
-    app.querySelector('#anx-uni').onclick = () => {
-      if (!(o.circuitos || []).length) { toast('Adicione circuitos no dimensionamento primeiro.'); return; }
-      editarDesenho({ xml: A.gerarUnifilarXml(o) }, 'Diagrama unifilar');
-    };
+    /* Multifilar/unifilar automático: o desenho salvo não muda sozinho quando os
+       circuitos mudam. Se já existe, pergunta se atualiza (refaz com os circuitos atuais). */
+    async function diagramaAuto(tipo) {
+      const n = (o.circuitos || []).length;
+      if (!n) { toast('Adicione circuitos no dimensionamento primeiro: cada circuito vira um disjuntor no diagrama.'); return; }
+      const nome = tipo === 'multi' ? 'Diagrama multifilar' : 'Diagrama unifilar';
+      const ex = (o.anexos || []).find(a => a.tipo === 'desenho' && (a.gerado === tipo || a.nome === nome));
+      let id = null;
+      if (ex) {
+        const r = await dialogo({
+          titulo: nome,
+          corpo: `<p style="margin-top:0">Já existe um ${nome.toLowerCase()} neste orçamento. O app vai montar o desenho com os <b>${n} circuito(s)</b> atuais do dimensionamento.</p>
+            <p class="ajuda"><b>Atualizar</b> troca o desenho existente (alterações feitas à mão nele se perdem). <b>Criar outro</b> mantém o antigo.</p>`,
+          acoes: [{ rotulo: 'Cancelar', valor: null }, { rotulo: 'Criar outro', valor: 'novo' }, { rotulo: 'Atualizar', classe: 'prim', valor: 'atualizar' }]
+        });
+        if (!r) return;
+        if (r === 'atualizar') id = ex.id;
+      }
+      await editarDesenho({ xml: tipo === 'multi' ? A.gerarMultifilarXml(o) : A.gerarUnifilarXml(o) }, ex && !id ? `${nome} ${(o.anexos || []).filter(a => a.tipo === 'desenho' && a.gerado === tipo).length + 1}` : nome, id);
+      const f = (o.anexos || []).find(a => a.id === id) || (o.anexos || []).slice(-1)[0];
+      if (f && f.tipo === 'desenho') { f.gerado = tipo; f.circuitos = n; agendarSalvar(); desenharAnexos(); }
+    }
+    app.querySelector('#anx-multi').onclick = () => diagramaAuto('multi');
+    app.querySelector('#anx-uni').onclick = () => diagramaAuto('uni');
     app.querySelector('#anx-arq').addEventListener('change', async ev => {
       const fs = [...ev.target.files]; ev.target.value = '';
       for (const f of fs) {
@@ -1850,7 +1866,7 @@
       </div>
 
       <div id="instalar"></div>
-      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.15.1</p>`;
+      <p class="ajuda" style="text-align:center;margin-top:24px">Orçamentos PWA · v1.15.2</p>`;
 
     // Só grava (e envia à nuvem) se algo mudou de fato
     const salvarEmpresa = () => {
